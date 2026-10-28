@@ -196,6 +196,7 @@ async function sbPull(password) {
     const key=await makeKey(password,bytesFromB64(remote.vault.salt),remote.vault.iterations);
     const restored=await decryptVault(remote.vault,key);
     await lastWrite;
+    await trustedDisable();
     await putEnvelope(remote.vault);
     data=restored;vaultKey=key;vaultEnvelope=remote.vault;lastWrite=Promise.resolve();
     sbRememberRev(remote.revision); sbAuto=false;
@@ -241,6 +242,7 @@ async function sbCompleteCloudOnboarding(password) {
   const key=await makeKey(password,bytesFromB64(env.salt),env.iterations);
   const decoded=await decryptVault(env,key);
   await lastWrite;
+  await trustedDisable();
   await putEnvelope(env);
   vaultEnvelope=env;vaultKey=key;data=decoded;lastWrite=Promise.resolve();
   sbRememberRev(remote.revision); sbOnboardRemote=null;
@@ -260,7 +262,7 @@ window.SIPETAK_SB_ACTION=function(el) {
   if(a==='sb-upload') sbUpload(false).catch(fail);
   else if(a==='sb-status') sbStatus().catch(fail);
   else if(a==='sb-prepare-pull') sbPullForm();
-  else if(a==='sb-signout'){(async()=>{try{await sbRequest('/auth/v1/logout',{method:'POST'});}catch{}finally{sbStoreSession(null);sbRememberUpdate(false);sbAuto=false;try{localStorage.setItem(SB_AUTO_KEY,'false')}catch{};toast('Keluar dari akun Supabase. Data lokal tetap aman.');render();}})();}
+  else if(a==='sb-signout'){(async()=>{try{if(window.SIPETAK_PUSH?.beforeSignOut)await window.SIPETAK_PUSH.beforeSignOut();await sbRequest('/auth/v1/logout',{method:'POST'});}catch{}finally{sbStoreSession(null);sbRememberUpdate(false);sbAuto=false;try{localStorage.setItem(SB_AUTO_KEY,'false')}catch{};toast('Keluar dari akun Supabase. Data lokal tetap aman.');render();}})();}
   return true;
 };
 document.addEventListener('submit',e=>{
