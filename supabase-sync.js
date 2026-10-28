@@ -5,6 +5,7 @@
 const SB_CONFIG_KEY = 'sipetak:supabase:config:v3';
 const SB_SESSION_KEY = 'sipetak:supabase:session:v3';
 const SB_AUTO_KEY = 'sipetak:supabase:auto:v3';
+const SB_REMEMBER_KEY = 'sipetak:supabase:remember-account:v1';
 let sbBusy = false, sbAutoTimer = null, sbRemoteCache = null;
 let sbSession = null;
 function sbRead(key, fallback, storage = localStorage) {
@@ -24,12 +25,27 @@ const sbBuildReady = Boolean(sbBuildUrl && sbBuildKey);
 let sbConfig = sbBuildReady ? {url:sbBuildUrl,key:sbBuildKey} : sbRead(SB_CONFIG_KEY, {url:'', key:''});
 let sbOnboardRemote = null;
 function sbIsConfigured() { return Boolean(sbConfig.url && sbConfig.key); }
-sbSession = sbRead(SB_SESSION_KEY, null, sessionStorage);
+/* Sesi akun dapat dipertahankan pada perangkat pribadi atas persetujuan pengguna.
+   Token refresh di localStorage punya risiko XSS; jangan aktifkan pada perangkat bersama. */
+let sbRemember = sbRead(SB_REMEMBER_KEY, false) === true;
+sbSession = sbRead(SB_SESSION_KEY, null, sessionStorage) || (sbRemember ? sbRead(SB_SESSION_KEY, null, localStorage) : null);
 let sbAuto = sbRead(SB_AUTO_KEY, false);
+function sbRememberUpdate(remember) {
+  sbRemember = Boolean(remember);
+  try {
+    localStorage.setItem(SB_REMEMBER_KEY, JSON.stringify(sbRemember));
+    if (sbRemember && sbSession) localStorage.setItem(SB_SESSION_KEY,JSON.stringify(sbSession));
+    else localStorage.removeItem(SB_SESSION_KEY);
+  } catch {}
+}
 function sbStoreSession(session) {
   sbSession = session;
-  try { if (session) sessionStorage.setItem(SB_SESSION_KEY,JSON.stringify(session)); else sessionStorage.removeItem(SB_SESSION_KEY); }
-  catch {}
+  try {
+    if (session) sessionStorage.setItem(SB_SESSION_KEY,JSON.stringify(session));
+    else sessionStorage.removeItem(SB_SESSION_KEY);
+    if (session && sbRemember) localStorage.setItem(SB_SESSION_KEY,JSON.stringify(session));
+    else localStorage.removeItem(SB_SESSION_KEY);
+  } catch {}
 }
 function sbValidConfig() {
   const url = String(sbConfig.url || '').trim().replace(/\/+$/, '');
@@ -105,10 +121,11 @@ function supabasePage() {
   <div class="sb-status"><b>${configured?'✓ Proyek sudah disiapkan':'⚠ Koneksi belum disiapkan'}</b></div>
   <p class="sb-inline">${configured?'URL proyek dan publishable key dibundel pada index.html. Perangkat baru tidak perlu mengisinya.':'Pengelola perlu memasukkan Project URL dan publishable key di index.html satu kali, lalu menerbitkan aplikasi pada HTTPS.'}</p>
   <p class="sb-inline">${sbBuildReady?'Konfigurasi pusat aktif pada semua perangkat.':(configured?'Memakai konfigurasi lama di perangkat ini; agar perangkat baru bisa login, konfigurasi harus dimasukkan dalam index.html.':'Jangan masukkan kunci admin rahasia ke kode publik.')} Pastikan migrasi SQL dan RLS Supabase sudah aktif.</p></section>
-  <section class="card"><h3>Autentikasi Supabase</h3>${signed?`<p>Masuk sebagai <b>${identity}</b>.</p><div class="actions"><button class="btn ghost" data-action="sb-signout">Keluar dari Supabase</button><button class="btn secondary" data-action="sb-status">Periksa data cloud</button></div>`:
+  <section class="card"><h3>Autentikasi Supabase</h3>${signed?`<p>Masuk sebagai <b>${identity}</b>.</p><div class="actions"><button class="btn ghost" data-action="sb-signout">Keluar dari Supabase</button><button class="btn secondary" data-action="sb-status">Periksa data cloud</button></div><label class="sb-inline" style="display:block;margin-top:12px"><input id="sbRememberToggle" type="checkbox" ${sbRemember?'checked':''}> Ingat login Supabase pada perangkat pribadi ini</label>`:
   `<form id="sbAuthForm" class="form-grid">${field('Email akun','email','email','','nama@contoh.go.id',true,true)}${field('Kata sandi akun Supabase','password','password','','Tidak sama dengan kata sandi brankas',true,true)}
+  <label class="field span2"><input type="checkbox" name="rememberDevice" value="yes" ${sbRemember?'checked':''}> Tetap login Supabase di perangkat pribadi ini</label>
   <div class="field span2"><div class="actions"><button class="btn" type="submit" name="intent" value="login" ${configured?'':'disabled'}>Masuk</button><button class="btn secondary" type="submit" name="intent" value="register" ${configured?'':'disabled'}>Daftar akun</button></div></div></form>`}
-  <p class="sb-inline">Kata sandi Supabase dan kata sandi brankas SIPETAK adalah dua hal berbeda. Sesi login berlaku pada tab/aplikasi ini dan dapat perlu diperbarui.</p></section></div>
+  <p class="sb-inline">Kata sandi Supabase dan kata sandi brankas SIPETAK adalah dua hal berbeda. Jika centang “Tetap login” aktif, sesi dapat dilanjutkan pada perangkat ini setelah aplikasi web dimulai ulang. Jangan gunakan pada perangkat bersama.</p></section></div>
   <section class="card"><h3>Kontrol migrasi terenkripsi</h3><p class="hint">MacBook: buat cadangan .sipetak, lalu kirim. iPhone: login akun Supabase yang sama, lalu ambil data menggunakan kata sandi brankas dari MacBook.</p>
   <div class="actions"><button class="btn" data-action="sb-upload" ${signed?'':'disabled'}>↑ Kirim data terenkripsi</button><button class="btn secondary" data-action="sb-prepare-pull" ${signed?'':'disabled'}>↓ Ambil dari Supabase</button><button class="btn ghost" data-action="backup">Buat cadangan lokal</button><button class="btn ghost" data-action="sb-status" ${signed?'':'disabled'}>Cek revisi cloud</button></div>
   <div class="field" style="margin-top:14px"><label><input style="width:auto;min-height:auto" type="checkbox" id="sbAutoToggle" ${sbAuto?'checked':''}> Kirim otomatis setelah penyimpanan lokal <b>(hanya jika revisi cocok)</b></label></div>
@@ -199,6 +216,7 @@ function sbShowCloudLogin() {
       <div id="sbOnboardError" class="errorbox span2" role="alert" style="min-height:0"></div>
       ${field('Email akun','email','email','','email@contoh.go.id',true,true)}
       ${field('Kata sandi akun','password','password','','Kata sandi login Supabase',true,true)}
+      <label class="field span2"><input type="checkbox" name="rememberDevice" value="yes" ${sbRemember?'checked':''}> Tetap login di perangkat pribadi ini</label>
       <button class="btn full span2" type="submit">Masuk & cari data saya →</button>
     </form>
     <p class="hint" style="margin-top:15px">Untuk keamanan, setelah login Anda perlu memasukkan kata sandi brankas lama sekali pada perangkat baru. Kata sandi brankas tidak dapat direset melalui email Supabase.</p>
@@ -242,7 +260,7 @@ window.SIPETAK_SB_ACTION=function(el) {
   if(a==='sb-upload') sbUpload(false).catch(fail);
   else if(a==='sb-status') sbStatus().catch(fail);
   else if(a==='sb-prepare-pull') sbPullForm();
-  else if(a==='sb-signout'){(async()=>{try{await sbRequest('/auth/v1/logout',{method:'POST'});}catch{}finally{sbStoreSession(null);sbAuto=false;try{localStorage.setItem(SB_AUTO_KEY,'false')}catch{};toast('Keluar dari akun Supabase. Data lokal tetap aman.');render();}})();}
+  else if(a==='sb-signout'){(async()=>{try{await sbRequest('/auth/v1/logout',{method:'POST'});}catch{}finally{sbStoreSession(null);sbRememberUpdate(false);sbAuto=false;try{localStorage.setItem(SB_AUTO_KEY,'false')}catch{};toast('Keluar dari akun Supabase. Data lokal tetap aman.');render();}})();}
   return true;
 };
 document.addEventListener('submit',e=>{
@@ -254,6 +272,7 @@ document.addEventListener('submit',e=>{
     if(form.id==='sbOnboardLogin'){
       const message=$('sbOnboardError');
       try {
+        sbRememberUpdate(values.rememberDevice==='yes');
         await sbAuth(String(values.email||'').trim(),String(values.password||''),false);
         const remote=await sbGetRemote(true);
         if(!remote?.vault) throw Error('Belum ada brankas cloud untuk akun ini. Pada MacBook sumber, buka menu Supabase lalu pilih Kirim data terenkripsi.');
@@ -266,6 +285,7 @@ document.addEventListener('submit',e=>{
       try { await sbCompleteCloudOnboarding(String(values.vaultPassword||'')); }
       catch(err) { if (message) message.textContent=err.message; else fail(err); }
     } else if(form.id==='sbAuthForm'){
+      sbRememberUpdate(values.rememberDevice==='yes');
       const result=await sbAuth(String(values.email||'').trim(),String(values.password||''),button.value==='register');
       toast(result);render();
     } else if(form.id==='sbPullForm'){
@@ -275,6 +295,11 @@ document.addEventListener('submit',e=>{
   })().catch(fail).finally(()=>sbBusyButton(button,false));
 },true);
 document.addEventListener('change',e=>{
+  if(e.target?.id==='sbRememberToggle'){
+    sbRememberUpdate(e.target.checked);
+    toast(sbRemember?'Login Supabase akan diingat pada perangkat pribadi ini.':'Login Supabase tidak lagi diingat setelah sesi berakhir.');
+    return;
+  }
   if(e.target?.id==='sbAutoToggle'){
     if(e.target.checked && data?.wfSettings?.cloud?.auto){e.target.checked=false;toast('Nonaktifkan sinkronisasi otomatis server lama dahulu.',true);return;}
     if(e.target.checked && (!sbSession?.user?.id || !sbKnownRev())){
