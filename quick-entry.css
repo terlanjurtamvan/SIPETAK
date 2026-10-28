@@ -1,0 +1,28 @@
+/* Fast input, progressively disclosed advanced fields. Mobile first. */
+.quick-entry{border:1px solid var(--app-border);border-radius:19px;background:var(--app-surface);padding:clamp(16px,2.5vw,24px);margin:18px 0 24px;box-shadow:var(--app-shadow)}
+.quick-entry__head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+.quick-entry__head h3{margin:0;color:var(--app-ink);font-size:var(--fs-lg)}
+.quick-entry__head p{margin:5px 0 0;color:var(--app-muted);font-size:var(--fs-sm)}
+.quick-entry__grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px}
+.quick-entry__field{min-width:0;display:flex;flex-direction:column;gap:6px}
+.quick-entry__field:first-child{grid-column:1 / -1}
+.quick-entry__field label{font-size:var(--fs-sm);font-weight:700;color:var(--app-ink)}
+.quick-entry input:not([type=checkbox]),.quick-entry select{width:100%;min-height:46px;padding:10px 12px;border:1px solid var(--app-border);border-radius:12px;background:var(--app-elevated);color:var(--app-ink);font-size:var(--fs-base)}
+.quick-entry input:focus-visible,.quick-entry select:focus-visible{outline:3px solid var(--app-focus);outline-offset:2px}
+.quick-entry__foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}
+.quick-entry__done{display:flex;align-items:center;gap:8px;color:var(--app-ink);font-size:var(--fs-sm);cursor:pointer}
+.quick-entry__done input{width:19px;height:19px;accent-color:var(--app-primary)}
+.quick-entry__advanced{margin-top:12px;border-top:1px solid var(--app-border);padding-top:9px}
+.quick-entry__advanced summary{cursor:pointer;list-style:disclosure-closed;color:var(--app-primary);font-size:var(--fs-sm);font-weight:700;padding:8px 0}
+.quick-entry__advanced[open] summary{margin-bottom:10px}
+.quick-entry__help{font-size:var(--fs-xs);color:var(--app-muted);margin:10px 0 0}
+.quick-entry__feedback{font-size:var(--fs-sm);color:var(--app-danger);font-weight:600}
+.quick-entry__submit{min-height:46px}
+@media(max-width:720px){.quick-entry__grid{grid-template-columns:1fr}.quick-entry__field:first-child{grid-column:auto}.quick-entry__foot{align-items:stretch;flex-direction:column}.quick-entry__submit{width:100%;order:-1}.quick-entry__done{min-height:44px}.quick-entry{margin-top:12px}}
+
+/* Simple mode for all detailed work forms */
+.form-more{border:1px solid var(--app-border);border-radius:12px;margin-top:15px;padding:10px 14px;background:var(--app-bg)}
+.form-more>summary{cursor:pointer;color:var(--app-primary);font-weight:750;font-size:var(--fs-sm);padding:7px 0}
+.form-more[open]>summary{margin-bottom:13px}
+.form-more .form-grid{margin:0}
+.form-more .field{min-width:0}

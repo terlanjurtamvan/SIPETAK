@@ -1,0 +1,5 @@
+/* Lifecycle cards and evidence controls. */
+.lc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:14px;margin:18px 0}
+.lc-card{min-width:0}.lc-card .section-head{align-items:flex-start}.lc-card .section-head h3{overflow-wrap:anywhere}
+.lc-choice{max-height:340px;overflow:auto;display:grid;gap:8px}.lc-choice label{display:flex;align-items:flex-start;gap:8px;padding:10px;background:var(--app-bg);border-radius:10px;color:var(--app-ink)}
+.lc-choice input{width:18px;height:18px;flex:none;margin-top:3px}

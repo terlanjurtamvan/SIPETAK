@@ -1,0 +1,45 @@
+{
+  "version": "3.3.0-rc1",
+  "generated_date": "2026-10-28",
+  "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
+  "verified_tests": [
+    "logic",
+    "theme",
+    "supabase mock",
+    "static structure",
+    "backend mock"
+  ],
+  "unverified": [
+    "real Supabase",
+    "Safari MacBook",
+    "Safari iPhone PWA",
+    "real Web Push",
+    "security audit",
+    "field usability test with real Sekretariat DPRD workflows"
+  ],
+  "cloud_data_format": "sipetak-vault-v1 (AES-256-GCM encrypted JSON envelope)",
+  "note": "Supabase URL and publishable key centralized in index.html; cloud onboarding for new device",
+  "product": "SIPETAK Pribadi",
+  "build_date": "2026-10-28",
+  "features": [
+    "tahunkinerja",
+    "arsip-readonly",
+    "rhk-draft-copy",
+    "iki-targets-year",
+    "yearly-export",
+    "supabase-encrypted-vault",
+    "quick-entry",
+    "progressive-disclosure",
+    "one-field-completion",
+    "auto-lifecycle",
+    "auto-evidence-link",
+    "safe-shell-only-sw-cache"
+  ],
+  "supabase_schema_change": false,
+  "vault_payload_schema": 3,
+  "previous_vault_payload_schema_accepted": [
+    2,
+    3
+  ],
+  "deployment_status": "staging-not-production-verified"
+}

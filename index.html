@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="SIPETAK">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="description" content="Ruang kerja pribadi Penelaah Teknis Kebijakan: tugas harian, telaahan staf, bukti dukung, dan RHK SKP.">
+  <meta name="color-scheme" content="light dark">
+  <!-- KONFIGURASI PUBLIK SUPABASE: ISI SEKALI SEBELUM DEPLOY.
+       HANYA Project URL dan publishable key; dilarang service_role / sb_secret_.
+       Metatag ini dapat dibaca aplikasi tanpa inline JavaScript (CSP ketat). -->
+  <meta name="sipetak-supabase-url" content="https://cnaveitgtodqtahzsnqf.supabase.co">
+  <meta name="sipetak-supabase-publishable-key" content="sb_publishable_efG2vuqp1UEcz6vrtArPpQ_rAdnJFAk">
+  <script src="./theme.js"></script>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./quick-entry.css"><link rel="stylesheet" href="./lifecycle.css"><link rel="stylesheet" href="./workflow.css"><link rel="stylesheet" href="./design-system.css"><link rel="stylesheet" href="./multiyear.css">
+  <title>SIPETAK v3.3 · Ruang Kerja Digital ASN</title>
+</head>
+<body>
+<div id="authScreen" class="auth-shell">
+  <div class="auth-side">
+    <div class="brand large"><span class="brandmark">S<span class="branddot"></span></span><div><strong>SIPETAK</strong><small>PRIBADI</small></div></div>
+    <div class="auth-illustration" aria-hidden="true"><div class="paper paper-a"><span></span><span></span><span></span><span></span></div><div class="paper paper-b"><div class="paper-circle">✓</div><span></span><span></span></div></div>
+    <div class="auth-side-copy"><span class="overline">RUANG KERJA PENELAAH TEKNIS KEBIJAKAN</span><h1>Kerja lebih tertata.<br><em>Bukti lebih siap.</em></h1><p>Agenda pekerjaan, telaahan staf, RHK, dan dokumen pendukung dalam satu aplikasi yang mengutamakan privasi.</p></div>
+    <div class="auth-tag">Sekretariat DPRD Kabupaten Kapuas Hulu</div>
+  </div>
+  <main class="auth-panel"><div class="auth-inner"><div class="auth-theme-bar"><button type="button" data-theme-toggle aria-label="Aktifkan tema gelap" aria-pressed="false"><span data-theme-icon>☾</span> <span data-theme-label>Gelap</span></button></div><div class="mobile-brand brand"><span class="brandmark">S<span class="branddot"></span></span><div><strong>SIPETAK</strong><small>PRIBADI</small></div></div>
+    <div class="eyebrow"><span class="eyebrow-dot"></span> Penyimpanan terenkripsi di perangkat</div>
+    <div id="authContent"></div>
+    <div class="auth-foot">SIPETAK adalah alat bantu pribadi, bukan sistem e-Kinerja BKN atau aplikasi resmi persuratan.</div>
+  </div></main>
+</div>
+<div id="appScreen" class="app-layout" hidden>
+  <aside class="sidebar">
+    <div class="brand"><span class="brandmark">S<span class="branddot"></span></span><div><strong>SIPETAK</strong><small>RUANG KERJA PRIBADI</small></div></div>
+    <div class="sidebar-section">MENU UTAMA</div>
+    <nav id="sidebarNav" class="side-nav" aria-label="Navigasi utama"></nav>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-tip"><div class="tip-icon">◈</div><b>Jaga cadangan data</b><span>Aktifkan sinkronisasi hanya pada server HTTPS yang disetujui instansi. Simpan cadangan terenkripsi secara rutin.</span><button data-action="navigate" data-view="pengaturan">Buka pengaturan <span aria-hidden="true">→</span></button></div>
+    <div class="sidebar-bottom">Bagian Persidangan dan Perundang-undangan<br>Sekretariat DPRD Kabupaten Kapuas Hulu</div>
+  </aside>
+  <div class="workarea">
+    <header class="topbar"><div class="topbar-left"><span class="topbar-tag">SIPETAK <span> / </span> <span id="headerView">Dashboard</span></span><h2 id="headerTitle">Ringkasan Pekerjaan</h2><p id="headerDesc">Pantau tugas, telaahan, dan bukti pendukung.</p></div><div class="topbar-right"><div id="yearSwitchMount"></div><button type="button" class="theme-switch" data-theme-toggle aria-label="Aktifkan tema gelap" aria-pressed="false"><span data-theme-icon>☾</span><span data-theme-label>Gelap</span></button><span id="offlineStatus" class="connection-status"><span class="connection-dot"></span> Lokal & privat</span><button class="circle-button" data-action="lock" aria-label="Kunci aplikasi" title="Kunci aplikasi">⌁</button><div class="user-bubble" id="userInitial">PT</div></div></header>
+    <main id="content" class="page-content" tabindex="-1"></main>
+    <footer class="main-footer"><span>SIPETAK Pribadi • v3.3</span><span>Dokumen telaahan adalah konsep sampai ditetapkan melalui prosedur resmi.</span></footer>
+  </div>
+  <nav id="mobileNav" class="mobile-nav" aria-label="Menu cepat"></nav>
+</div>
+<div id="modalRoot"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="./katalog-kinerja.js" defer></script>
+<script src="./lifecycle-engine.js" defer></script>
+<script src="./lifecycle-ui.js" defer></script>
+<script src="./quick-entry.js" defer></script>
+<script src="./workflow.js" defer></script>
+<script src="./multiyear.js" defer></script>
+<script src="./app.js" defer></script>
+<script src="./supabase-sync.js" defer></script>
+</body>
+</html>
