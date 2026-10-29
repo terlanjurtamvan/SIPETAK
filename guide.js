@@ -57,6 +57,13 @@
       'Pilih bulan untuk meninjau aksi, menyesuaikan target dan mengisi realisasi yang didukung bukti.',
       'Ekspor CSV atau cetak draf untuk pembahasan dengan atasan sebelum dijadikan acuan pribadi.'
     ],sample:'Target 24 bahan telaahan setahun → pembagian awal 2 per bulan. Target IKI 95% tetap 95% tiap bulan, bukan 95÷12.',note:'Target dan rumusan awal hanyalah usulan, bukan SKP yang telah disepakati. Bulan tanpa penugasan bukan 100% capaian.'},
+    {id:'ai',group:'Pendukung',label:'Asisten AI — telaahan, persidangan, DIM, SKP dan prioritas',page:'ai',where:'Asisten AI',required:'Login Supabase, Worker AI terhubung, dan materi yang boleh diproses oleh penyedia AI.',steps:[
+      'Buka menu Asisten AI. Pilih fungsi: Telaahan Staf, Persidangan, Raperda/DIM, SKP/RHK, atau Prioritas Harian.',
+      'Pilih tepat satu catatan sumber tahun aktif atau isi konteks aman secara manual. Lampiran tidak ikut dikirim.',
+      'Baca pratinjau teks. Jangan kirim data rahasia, identitas pribadi, atau dokumen yang belum diizinkan instansi.',
+      'Centang persetujuan dan tekan Buat konsep dengan AI. Pastikan sudah login Supabase dan alamat Worker AI diisi.',
+      'Periksa fakta, dasar hukum dan hasilnya. Salin, simpan sebagai draf terenkripsi, atau pindahkan konsep telaahan ke formulir untuk diedit.'
+    ],sample:'Pilih tugas “Telaah bahan rapat Bapemperda” → pratinjau materi → Buat konsep → periksa dan salin draf ke Telaahan Staf.',note:'AI tidak otomatis membaca semua data. Draf AI tidak mengesahkan dokumen, membuat capaian resmi SKP, atau membuktikan keberlakuan peraturan. Biaya inferensi Cloudflare Workers AI mengikuti akun dan kuota.'},
     {id:'otomasi',group:'Kinerja',label:'Pusat Otomasi — siklus, data, bukti & SKP',page:'otomasi',where:'Pusat Otomasi',required:'Cukup catat pekerjaan di menu biasanya dan tautkan bukti menggunakan pilihan pekerjaan yang tersedia.',steps:[
       'Simpan pekerjaan di Catat Cepat, Tugas, Asisten Sekwan, Persidangan, atau DIM; siklus dasar dibuat otomatis.',
       'Setelah pekerjaan mulai diproses, tahap awal diperbarui. Tahapan pemeriksaan, laporan dan arsip tetap perlu diputuskan pengguna.',

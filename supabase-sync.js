@@ -315,3 +315,10 @@ document.addEventListener('change',e=>{
    Only transmit after lastWrite has completed. Debounce rapid changes. */
 const sbPriorSaved = workflowSaved;
 workflowSaved = function(){sbPriorSaved();if(!sbAuto||!sbSession?.user?.id)return;clearTimeout(sbAutoTimer);sbAutoTimer=setTimeout(()=>{if(data&&vaultKey)sbUpload(true)},1750);};
+
+/* v3.8: read-only, short-lived access token for the separately authenticated AI Worker. */
+window.SIPETAK_SB_AI_TOKEN = async function(){
+  await sbFreshSession();
+  if(!sbSession?.access_token || !sbSession?.user?.id) throw Error('Silakan login Supabase dari menu Supabase sebelum menggunakan AI.');
+  return sbSession.access_token;
+};

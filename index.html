@@ -17,12 +17,13 @@
   <meta name="sipetak-supabase-publishable-key" content="sb_publishable_efG2vuqp1UEcz6vrtArPpQ_rAdnJFAk">
   <!-- Opsional: isi alamat Worker v3.5 yang sudah dipasang; kosong = push belum aktif. -->
   <meta name="sipetak-push-worker-url" content="">
+  <meta name="sipetak-ai-worker-url" content="">
   <script src="./theme.js"></script>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./quick-entry.css"><link rel="stylesheet" href="./lifecycle.css"><link rel="stylesheet" href="./workflow.css"><link rel="stylesheet" href="./design-system.css"><link rel="stylesheet" href="./multiyear.css"><link rel="stylesheet" href="./skp-planner.css"><link rel="stylesheet" href="./guide.css"><link rel="stylesheet" href="./automation.css">
-  <title>SIPETAK v3.7 · Otomasi Siklus & Bukti</title>
+  <link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./quick-entry.css"><link rel="stylesheet" href="./lifecycle.css"><link rel="stylesheet" href="./workflow.css"><link rel="stylesheet" href="./design-system.css"><link rel="stylesheet" href="./multiyear.css"><link rel="stylesheet" href="./skp-planner.css"><link rel="stylesheet" href="./guide.css"><link rel="stylesheet" href="./automation.css"><link rel="stylesheet" href="./ai-assistant.css">
+  <title>SIPETAK v3.8 · Asisten AI & Otomasi</title>
 </head>
 <body>
 <div id="authScreen" class="auth-shell">
@@ -50,7 +51,7 @@
   <div class="workarea">
     <header class="topbar"><div class="topbar-left"><span class="topbar-tag">SIPETAK <span> / </span> <span id="headerView">Dashboard</span></span><h2 id="headerTitle">Ringkasan Pekerjaan</h2><p id="headerDesc">Pantau tugas, telaahan, dan bukti pendukung.</p></div><div class="topbar-right"><div id="yearSwitchMount"></div><button type="button" class="theme-switch" data-theme-toggle aria-label="Aktifkan tema gelap" aria-pressed="false"><span data-theme-icon>☾</span><span data-theme-label>Gelap</span></button><span id="offlineStatus" class="connection-status"><span class="connection-dot"></span> Lokal & privat</span><button class="circle-button" data-action="lock" aria-label="Kunci aplikasi" title="Kunci aplikasi">⌁</button><div class="user-bubble" id="userInitial">PT</div></div></header>
     <main id="content" class="page-content" tabindex="-1"></main>
-    <footer class="main-footer"><span>SIPETAK Pribadi • v3.7</span><span>Dokumen telaahan adalah konsep sampai ditetapkan melalui prosedur resmi.</span></footer>
+    <footer class="main-footer"><span>SIPETAK Pribadi • v3.8</span><span>Dokumen telaahan adalah konsep sampai ditetapkan melalui prosedur resmi.</span></footer>
   </div>
   <nav id="mobileNav" class="mobile-nav" aria-label="Menu cepat"></nav>
 </div>
@@ -69,5 +70,6 @@
 <script src="./app.js" defer></script>
 <script src="./supabase-sync.js" defer></script>
 <script src="./push-client.js" defer></script>
+<script src="./ai-assistant.js" defer></script>
 </body>
 </html>
