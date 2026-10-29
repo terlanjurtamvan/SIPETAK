@@ -99,10 +99,29 @@
     busy=true;currentOutput='';currentSource=selected;const requestMode=mode,requestSelected=selected,requestNotes=notes;const btn=document.querySelector('[data-action="ai-send"]');if(btn){btn.disabled=true;btn.textContent='Memproses…'}status('Menghubungi AI. Jangan tutup aplikasi selama membuat konsep.');
     abort=new AbortController();const timer=setTimeout(()=>abort?.abort(),45000);
     try{
-      const token=await window.SIPETAK_SB_AI_TOKEN();
-      const response=await fetch(url+'/assist',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:abort.signal});
+      const requestBody=JSON.stringify(payload);
+      const sendWithToken=async token=>fetch(url+'/assist',{method:'POST',mode:'cors',credentials:'omit',cache:'no-store',redirect:'error',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:requestBody,signal:abort.signal});
+      let response=await sendWithToken(await window.SIPETAK_SB_AI_TOKEN());
+      // Worker verifies the user BEFORE AI inference. A 401 is safe to retry once
+      // after refreshing the session; a 503 is NOT a password error.
+      if(response.status===401){
+        status('Sesi Supabase perlu diperbarui. Mencoba memperbarui login…');
+        try{response=await sendWithToken(await window.SIPETAK_SB_AI_TOKEN(true));}
+        catch{throw Error('Sesi Supabase tidak dapat diperbarui. Buka menu Supabase, masuk dengan akun yang benar, lalu coba lagi.');}
+      }
       const body=await response.json().catch(()=>({}));
-      if(!response.ok)throw Error(body.error||'Layanan AI gagal (HTTP '+response.status+').');
+      if(!response.ok){
+        const code=String(body.code||'');
+        const tips={
+          AI_SUPABASE_CONFIG:'Pengaturan Supabase pada Cloudflare Worker AI belum tepat. Pasang PATCH Worker terbaru, lalu periksa /health.',
+          AI_SUPABASE_NETWORK:'Worker tidak dapat menghubungi Supabase. Periksa /health dan koneksi server.',
+          AI_SUPABASE_TIMEOUT:'Koneksi Worker ke Supabase melewati batas waktu. Coba lagi.',
+          AI_SUPABASE_UPSTREAM:'Supabase sedang menolak atau gagal melayani pemeriksaan. Coba lagi atau periksa dashboard Supabase.',
+          AI_SUPABASE_RESPONSE:'Respons Supabase tidak dikenali. Periksa Worker AI dan konfigurasi proyek.',
+          AI_SESSION_INVALID:'Sesi Supabase tidak sah. Buka menu Supabase dan masuk kembali dengan akun yang benar.'
+        };
+        throw Error(tips[code]||body.error||'Layanan AI gagal (HTTP '+response.status+').');
+      }
       if(!body.draft||typeof body.draft!=='string')throw Error('Layanan AI tidak menghasilkan teks.');
       if(!vaultKey||!data||view!=='ai'||mode!==requestMode||selected!==requestSelected||notes!==requestNotes)return;
       currentOutput=body.draft.slice(0,12000);

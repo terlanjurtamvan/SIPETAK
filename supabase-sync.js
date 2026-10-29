@@ -84,7 +84,7 @@ async function sbRequest(path,opts={},auth=true,renew=true) {
   if (resp.status===401 && auth && renew && sbSession?.refresh_token) {
     await sbRefresh();return sbRequest(path,opts,auth,false);
   }
-  if (!resp.ok) { const msg=typeof result==='object' ? result?.msg||result?.error_description||result?.message||result?.error||result?.details : null; const e=Error(String(msg||('Supabase HTTP '+resp.status))); e.status=resp.status; throw e; }
+  if (!resp.ok) { const msg=typeof result==='object' ? result?.msg||result?.error_description||result?.message||result?.error||result?.details : null; const e=Error(String(msg||('Supabase HTTP '+resp.status))); e.status=resp.status; e.code=typeof result==='object'?String(result?.code||''):''; throw e; }
   return result;
 }
 async function sbRefresh() {
@@ -99,16 +99,55 @@ async function sbFreshSession() {
   if (Number(sbSession.expires_at||0) < Date.now()/1000 + 50) await sbRefresh();
 }
 function sbAuthIdentity() { return sbSession?.user?.email || 'Belum login'; }
+/* Login errors are authentication failures, not damaged vaults or AI problems.
+   Do not reveal whether the email exists, or silently switch accounts. */
+function sbExplainAuthError(error) {
+  const code=String(error?.code||'').toLowerCase();
+  const msg=String(error?.message||'').toLowerCase();
+  if(code==='invalid_credentials'||/invalid login credentials|invalid_credentials|email not found|invalid password/.test(msg))
+    return 'Email atau kata sandi Supabase tidak cocok. Periksa email yang benar-benar terdaftar di Supabase (bukan kata sandi brankas SIPETAK). Jika lupa, tekan “Lupa kata sandi Supabase?”.';
+  if(code==='email_not_confirmed'||/email not confirmed/.test(msg))
+    return 'Email Supabase belum dikonfirmasi. Buka email verifikasi sebelum mencoba login lagi.';
+  if(code==='over_request_rate_limit'||code==='over_email_send_rate_limit'||error?.status===429)
+    return 'Terlalu banyak percobaan. Tunggu beberapa saat sebelum mencoba lagi.';
+  if(code==='email_address_not_authorized')
+    return 'Server Supabase belum diizinkan mengirim email ke alamat ini. Periksa pengaturan SMTP proyek.';
+  return error?.message||'Permintaan Supabase gagal. Coba kembali.';
+}
 async function sbAuth(email,password,register) {
-  if (password.length<8) throw Error('Kata sandi akun Supabase minimal 8 karakter.');
+  email=String(email||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('Masukkan alamat email Supabase yang valid.');
+  if(!password)throw Error('Masukkan kata sandi akun Supabase.');
+  if(register&&password.length<8)throw Error('Kata sandi pendaftaran minimal 8 karakter.');
   const path=register?'/auth/v1/signup':'/auth/v1/token?grant_type=password';
-  const result=await sbRequest(path,{method:'POST',body:JSON.stringify({email,password})},false);
+  let result;
+  try { result=await sbRequest(path,{method:'POST',body:JSON.stringify({email,password})},false); }
+  catch(e){throw Error(sbExplainAuthError(e));}
   if (result?.access_token && result?.user) {
     sbStoreSession({...result,expires_at:Math.floor(Date.now()/1000)+(result.expires_in||3600)});
     return 'Berhasil masuk akun Supabase.';
   }
   if (register) return 'Pendaftaran diminta. Periksa email untuk verifikasi sebelum login (jika verifikasi diaktifkan).';
   throw Error('Login tidak menghasilkan sesi pengguna.');
+}
+/* Recovery does not touch the SIPETAK vault. The public redirect must be
+   listed in Supabase Auth > URL Configuration > Redirect URLs. */
+function sbRecoveryUrl(){return new URL('./reset-password.html',location.href).href;}
+function sbRecoveryModal(){
+  const email=document.querySelector('#sbAuthForm [name="email"], #sbOnboardLogin [name="email"]')?.value?.trim()||'';
+  openModal('Pulihkan kata sandi Supabase','Untuk AKUN SUPABASE, bukan kata sandi brankas terenkripsi.',
+    `<p class="hint">Masukkan email yang benar-benar terdaftar pada proyek Supabase SIPETAK. Jika akun ada dan layanan email diaktifkan, tautan pemulihan akan dikirim.</p>
+     ${field('Email akun Supabase','email','email',email,'email yang digunakan saat mendaftar',true,true)}
+     <p class="hint">Reset tidak menghapus atau mengubah data brankas SIPETAK. Setelah mengganti password, masuk kembali dari menu Supabase.</p>`,
+    '<button type="button" class="btn ghost" data-action="close">Batal</button><button type="submit" class="btn">Kirim email pemulihan</button>', 'sbRecoverForm');
+}
+async function sbSendRecovery(email){
+  email=String(email||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw Error('Masukkan alamat email Supabase yang valid.');
+  const path='/auth/v1/recover?redirect_to='+encodeURIComponent(sbRecoveryUrl());
+  try{await sbRequest(path,{method:'POST',body:JSON.stringify({email})},false);}
+  catch(e){throw Error(sbExplainAuthError(e));}
+  return 'Jika email terdaftar dan layanan email Supabase aktif, tautan pemulihan akan dikirim. Periksa Kotak Masuk dan Spam.';
 }
 function supabasePage() {
   const configured=sbIsConfigured(), signed=Boolean(sbSession?.user?.id);
@@ -122,9 +161,11 @@ function supabasePage() {
   <p class="sb-inline">${configured?'URL proyek dan publishable key dibundel pada index.html. Perangkat baru tidak perlu mengisinya.':'Pengelola perlu memasukkan Project URL dan publishable key di index.html satu kali, lalu menerbitkan aplikasi pada HTTPS.'}</p>
   <p class="sb-inline">${sbBuildReady?'Konfigurasi pusat aktif pada semua perangkat.':(configured?'Memakai konfigurasi lama di perangkat ini; agar perangkat baru bisa login, konfigurasi harus dimasukkan dalam index.html.':'Jangan masukkan kunci admin rahasia ke kode publik.')} Pastikan migrasi SQL dan RLS Supabase sudah aktif.</p></section>
   <section class="card"><h3>Autentikasi Supabase</h3>${signed?`<p>Masuk sebagai <b>${identity}</b>.</p><div class="actions"><button class="btn ghost" data-action="sb-signout">Keluar dari Supabase</button><button class="btn secondary" data-action="sb-status">Periksa data cloud</button></div><label class="sb-inline" style="display:block;margin-top:12px"><input id="sbRememberToggle" type="checkbox" ${sbRemember?'checked':''}> Ingat login Supabase pada perangkat pribadi ini</label>`:
-  `<form id="sbAuthForm" class="form-grid">${field('Email akun','email','email','','nama@contoh.go.id',true,true)}${field('Kata sandi akun Supabase','password','password','','Tidak sama dengan kata sandi brankas',true,true)}
+  `<form id="sbAuthForm" class="form-grid">${field('Email akun','email','email','','Alamat email yang terdaftar di Supabase',true,true)}${field('Kata sandi akun Supabase','password','password','','Tidak sama dengan kata sandi brankas',true,true)}
+  <div id="sbLoginError" class="errorbox span2" role="alert" hidden></div>
   <label class="field span2"><input type="checkbox" name="rememberDevice" value="yes" ${sbRemember?'checked':''}> Tetap login Supabase di perangkat pribadi ini</label>
-  <div class="field span2"><div class="actions"><button class="btn" type="submit" name="intent" value="login" ${configured?'':'disabled'}>Masuk</button><button class="btn secondary" type="submit" name="intent" value="register" ${configured?'':'disabled'}>Daftar akun</button></div></div></form>`}
+  <div class="field span2"><div class="actions"><button class="btn" type="submit" name="intent" value="login" ${configured?'':'disabled'}>Masuk</button><button class="btn secondary" type="submit" name="intent" value="register" ${configured?'':'disabled'}>Daftar akun</button><button type="button" class="btn ghost" data-action="sb-recover" ${configured?'':'disabled'}>Lupa kata sandi Supabase?</button></div></div>
+  <p class="hint span2">Pastikan email benar-benar terdaftar di <b>Supabase Dashboard → Authentication → Users</b>. Gunakan alamat email yang bisa Anda akses; jangan gunakan email dummy. Jika sudah ada brankas cloud, jangan membuat akun lain tanpa memeriksa keterkaitan data.</p></form>`}
   <p class="sb-inline">Kata sandi Supabase dan kata sandi brankas SIPETAK adalah dua hal berbeda. Jika centang “Tetap login” aktif, sesi dapat dilanjutkan pada perangkat ini setelah aplikasi web dimulai ulang. Jangan gunakan pada perangkat bersama.</p></section></div>
   <section class="card"><h3>Kontrol migrasi terenkripsi</h3><p class="hint">MacBook: buat cadangan .sipetak, lalu kirim. iPhone: login akun Supabase yang sama, lalu ambil data menggunakan kata sandi brankas dari MacBook.</p>
   <div class="actions"><button class="btn" data-action="sb-upload" ${signed?'':'disabled'}>↑ Kirim data terenkripsi</button><button class="btn secondary" data-action="sb-prepare-pull" ${signed?'':'disabled'}>↓ Ambil dari Supabase</button><button class="btn ghost" data-action="backup">Buat cadangan lokal</button><button class="btn ghost" data-action="sb-status" ${signed?'':'disabled'}>Cek revisi cloud</button></div>
@@ -219,6 +260,7 @@ function sbShowCloudLogin() {
       ${field('Kata sandi akun','password','password','','Kata sandi login Supabase',true,true)}
       <label class="field span2"><input type="checkbox" name="rememberDevice" value="yes" ${sbRemember?'checked':''}> Tetap login di perangkat pribadi ini</label>
       <button class="btn full span2" type="submit">Masuk & cari data saya →</button>
+      <button type="button" class="btn ghost full span2" data-action="sb-recover">Lupa kata sandi Supabase?</button>
     </form>
     <p class="hint" style="margin-top:15px">Untuk keamanan, setelah login Anda perlu memasukkan kata sandi brankas lama sekali pada perangkat baru. Kata sandi brankas tidak dapat direset melalui email Supabase.</p>
     <button class="btn ghost" data-action="sb-back-to-create">← Kembali ke ruang kerja lokal</button>`;
@@ -261,12 +303,13 @@ window.SIPETAK_SB_ACTION=function(el) {
   if(!a?.startsWith('sb-'))return false;
   if(a==='sb-upload') sbUpload(false).catch(fail);
   else if(a==='sb-status') sbStatus().catch(fail);
+  else if(a==='sb-recover') sbRecoveryModal();
   else if(a==='sb-prepare-pull') sbPullForm();
   else if(a==='sb-signout'){(async()=>{try{if(window.SIPETAK_PUSH?.beforeSignOut)await window.SIPETAK_PUSH.beforeSignOut();await sbRequest('/auth/v1/logout',{method:'POST'});}catch{}finally{sbStoreSession(null);sbRememberUpdate(false);sbAuto=false;try{localStorage.setItem(SB_AUTO_KEY,'false')}catch{};toast('Keluar dari akun Supabase. Data lokal tetap aman.');render();}})();}
   return true;
 };
 document.addEventListener('submit',e=>{
-  if(!['sbAuthForm','sbPullForm','sbOnboardLogin','sbOnboardUnlock'].includes(e.target?.id))return;
+  if(!['sbAuthForm','sbPullForm','sbOnboardLogin','sbOnboardUnlock','sbRecoverForm'].includes(e.target?.id))return;
   e.preventDefault();e.stopImmediatePropagation();
   const form=e.target, values=Object.fromEntries(new FormData(form)),button=e.submitter||form.querySelector('[type=submit]');
   sbBusyButton(button,true);
@@ -274,8 +317,8 @@ document.addEventListener('submit',e=>{
     if(form.id==='sbOnboardLogin'){
       const message=$('sbOnboardError');
       try {
+        await sbAuth(String(values.email||''),String(values.password||''),false);
         sbRememberUpdate(values.rememberDevice==='yes');
-        await sbAuth(String(values.email||'').trim(),String(values.password||''),false);
         const remote=await sbGetRemote(true);
         if(!remote?.vault) throw Error('Belum ada brankas cloud untuk akun ini. Pada MacBook sumber, buka menu Supabase lalu pilih Kirim data terenkripsi.');
         if(await getEnvelope()) throw Error('Perangkat ini sudah mempunyai data lokal. Buka data lokal terlebih dahulu sebelum melakukan pemulihan.');
@@ -287,9 +330,19 @@ document.addEventListener('submit',e=>{
       try { await sbCompleteCloudOnboarding(String(values.vaultPassword||'')); }
       catch(err) { if (message) message.textContent=err.message; else fail(err); }
     } else if(form.id==='sbAuthForm'){
-      sbRememberUpdate(values.rememberDevice==='yes');
-      const result=await sbAuth(String(values.email||'').trim(),String(values.password||''),button.value==='register');
-      toast(result);render();
+      try {
+        // Only persist the preference after a successful sign-in; failed
+        // credentials must never clear an existing valid session or vault.
+        const result=await sbAuth(String(values.email||''),String(values.password||''),button.value==='register');
+        if(sbSession?.access_token)sbRememberUpdate(values.rememberDevice==='yes');
+        toast(result);render();
+      } catch(err) {
+        const box=$('sbLoginError');
+        if(box){box.hidden=false;box.textContent=sbExplainAuthError(err);}else fail(err);
+      }
+    } else if(form.id==='sbRecoverForm'){
+      const message=await sbSendRecovery(values.email||'');
+      closeModal();toast(message);
     } else if(form.id==='sbPullForm'){
       if(values.confirmation!=='GANTI')throw Error('Ketik tepat GANTI untuk menimpa data lokal.');
       await sbPull(values.vaultPassword||'');
@@ -317,8 +370,10 @@ const sbPriorSaved = workflowSaved;
 workflowSaved = function(){sbPriorSaved();if(!sbAuto||!sbSession?.user?.id)return;clearTimeout(sbAutoTimer);sbAutoTimer=setTimeout(()=>{if(data&&vaultKey)sbUpload(true)},1750);};
 
 /* v3.8: read-only, short-lived access token for the separately authenticated AI Worker. */
-window.SIPETAK_SB_AI_TOKEN = async function(){
-  await sbFreshSession();
-  if(!sbSession?.access_token || !sbSession?.user?.id) throw Error('Silakan login Supabase dari menu Supabase sebelum menggunakan AI.');
+window.SIPETAK_SB_AI_TOKEN = async function(forceRefresh=false){
+  if (!sbSession?.access_token || !sbSession?.user?.id) throw Error('Silakan login akun Supabase yang benar dari menu Supabase sebelum menggunakan AI.');
+  if (forceRefresh) await sbRefresh();
+  else await sbFreshSession();
+  if(!sbSession?.access_token || !sbSession?.user?.id) throw Error('Sesi Supabase habis. Masuk kembali dari menu Supabase.');
   return sbSession.access_token;
 };
