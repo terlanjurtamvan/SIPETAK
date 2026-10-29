@@ -88,7 +88,113 @@
     <section class="card"><h3>3 · Hasil konsep AI</h3><div id="aiResult">${currentOutput?resultHtml():'<p class="hint">Setelah diproses, hasil AI muncul di sini. Anda dapat menyalin atau menyimpan sebagai draf terenkripsi.</p>'}</div></section></div></div>
     <section class="card"><h3>Draf AI tersimpan dalam brankas tahun ${myActiveYear()}</h3><p class="hint">Draf bukan dokumen resmi, bukan bukti sah, dan tidak mengubah SKP atau status pekerjaan. Maksimal 30 draf terakhir tersimpan.</p><div class="ai-drafts">${drafts().length?drafts().map(x=>`<div class="ai-draft"><div><b>${escape(MODES[x.mode]?.label||'Draf AI')}</b><small>${escape(new Date(x.createdAt).toLocaleString('id-ID'))} · Draf untuk diverifikasi</small></div><div class="actions"><button class="btn sm ghost" data-action="ai-open-draft" data-id="${escape(x.id)}">Lihat</button><button class="btn sm danger" data-action="ai-delete-draft" data-id="${escape(x.id)}" ${myYearArchived()?'disabled':''}>Hapus</button></div></div>`).join(''):'<p class="hint">Belum ada draf AI yang disimpan.</p>'}</div></section>`;
   }
-  function resultHtml(){return `<div class="ai-result-note">HASIL AI — DRAF, BUKAN DOKUMEN RESMI</div><pre class="ai-result-text">${escape(currentOutput)}</pre><div class="actions"><button class="btn sm secondary" data-action="ai-copy">Salin hasil</button><button class="btn sm secondary" data-action="ai-save-draft" ${myYearArchived()?'disabled':''}>Simpan draf terenkripsi</button>${mode==='telaahan'&&!myYearArchived()?'<button class="btn sm ghost" data-action="ai-to-review">Buka di formulir Telaahan</button>':''}</div>`}
+  // Render only a small, safe Markdown subset. Never trust AI text as HTML.
+  // Source text in the AES-GCM vault remains unchanged; this is presentation only.
+  function displaySource(source){
+    let lines=String(source??'').replace(/\r\n?/g,'\n').split('\n');
+    const notice=/^\*{0,2}\s*(?:DRAF\s+AI\s*[—–-]\s*WAJIB\s+VERIFIKASI|HASIL\s+AI\s*[—–-]\s*DRAF\s*[,;—–-]?\s*BUKAN\s+DOKUMEN\s+RESMI)\s*\*{0,2}\s*$/i;
+    // Many AI models repeat their own disclaimer before the actual document.
+    // Remove only consecutive notices at the beginning; never substantive content.
+    let removed=0;
+    while(lines.length&&removed<6){
+      if(!lines[0].trim()){lines.shift();continue}
+      if(notice.test(lines[0].trim())){lines.shift();removed++;continue}
+      break;
+    }
+    return lines.join('\n').trim();
+  }
+  function inlineDoc(source){
+    // Escape FIRST, then introduce only fixed, locally-authored tags.
+    return String(source??'').split(/(`[^`\n]{1,400}`)/g).map(part=>{
+      if(part.startsWith('`')&&part.endsWith('`')&&part.length>1)return '<code>'+escape(part.slice(1,-1))+'</code>';
+      return escape(part).replace(/\*\*([^*\n]{1,900})\*\*/g,'<strong>$1</strong>')
+        .replace(/(^|[^*])\*([^*\n]{1,900})\*(?!\*)/g,'$1<em>$2</em>');
+    }).join('');
+  }
+  function metaRow(line){
+    const m=line.match(/^\s*(?:\*\*([^*:\n]{1,45}):\*\*|([A-Za-zÀ-ÿ ]{2,45}):)\s*(.*?)\s*$/);
+    if(!m)return null;
+    const label=(m[1]||m[2]).trim();
+    return /^(kepada|dari|tanggal|perihal|nomor|lampiran|sifat|hal|tempat)$/i.test(label)?{label,value:m[3]}:null;
+  }
+  function headingFromBold(line){
+    const m=line.match(/^\s*\*\*([^*\n]{3,125})\*\*\s*$/);if(!m)return '';
+    const content=m[1].trim();
+    return /[A-ZÀ-Ý]/.test(content)&&content===content.toLocaleUpperCase('id-ID')&&!content.endsWith(':')?content:'';
+  }
+  function renderDocument(source){
+    const lines=displaySource(source).split('\n').slice(0,900);
+    const out=[];let i=0,seenHeading=false;
+    const isBlank=l=>!l.trim();
+    const isRule=l=>/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
+    const isHeader=l=>/^\s*#{1,5}\s+\S/.test(l)||!!headingFromBold(l);
+    const isList=l=>/^\s{0,8}(?:[-+*]\s+|\d{1,3}[.)]\s+)/.test(l);
+    const isFence=l=>/^\s*```/.test(l);
+    const isQuote=l=>/^\s*>/.test(l);
+    const pipeCells=l=>l.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(x=>x.trim());
+    const isTableSep=l=>/^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(l);
+    while(i<lines.length){
+      const line=lines[i];
+      if(isBlank(line)){i++;continue}
+      if(isFence(line)){
+        i++;const code=[];
+        while(i<lines.length&&!isFence(lines[i]))code.push(lines[i++]);
+        if(i<lines.length)i++;
+        out.push('<pre class="ai-code"><code>'+escape(code.join('\n'))+'</code></pre>');continue;
+      }
+      if(isRule(line)){out.push('<hr class="ai-doc-rule">');i++;continue}
+      if(isHeader(line)){
+        let text='';
+        const m=line.match(/^\s*(#{1,5})\s+(.+)$/);
+        if(m){text=m[2];}else{text=headingFromBold(line)}
+        const level=seenHeading?3:2;
+        out.push('<h'+level+'>'+inlineDoc(text)+'</h'+level+'>');seenHeading=true;i++;continue;
+      }
+      if(metaRow(line)){
+        const rows=[];
+        while(i<lines.length&&metaRow(lines[i])){rows.push(metaRow(lines[i]));i++}
+        out.push('<dl class="ai-document-meta">'+rows.map(r=>'<div class="ai-meta-row"><dt>'+escape(r.label)+'</dt><dd>'+inlineDoc(r.value)+'</dd></div>').join('')+'</dl>');continue;
+      }
+      if(isQuote(line)){
+        const quotes=[];while(i<lines.length&&isQuote(lines[i]))quotes.push(lines[i++].replace(/^\s*>\s?/,''));
+        out.push('<blockquote>'+quotes.map(inlineDoc).join('<br>')+'</blockquote>');continue;
+      }
+      if(isList(line)){
+        let kind='';const items=[];
+        while(i<lines.length&&isList(lines[i])){
+          const l=lines[i],ordered=/^\s{0,8}\d{1,3}[.)]\s+/.test(l),nextKind=ordered?'ol':'ul';
+          if(kind&&kind!==nextKind)break;
+          i++;const text=l.replace(/^\s{0,8}(?:[-+*]\s+|\d{1,3}[.)]\s+)/,'');
+          kind=nextKind;items.push('<li>'+inlineDoc(text)+'</li>');
+        }
+        out.push('<'+(kind||'ul')+'>'+items.join('')+'</'+(kind||'ul')+'>');continue;
+      }
+      if(i+1<lines.length&&line.includes('|')&&isTableSep(lines[i+1])){
+        const head=pipeCells(line);i+=2;const rows=[];
+        while(i<lines.length&&lines[i].includes('|')&&!isBlank(lines[i])&&rows.length<40){rows.push(pipeCells(lines[i++]));}
+        out.push('<div class="ai-table-scroller"><table><thead><tr>'+head.map(x=>'<th>'+inlineDoc(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(row=>'<tr>'+head.map((_,n)=>'<td>'+inlineDoc(row[n]||'')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>');continue;
+      }
+      const para=[];
+      while(i<lines.length&&!isBlank(lines[i])&&!isFence(lines[i])&&!isRule(lines[i])&&!isHeader(lines[i])&&!metaRow(lines[i])&&!isList(lines[i])&&!isQuote(lines[i])){
+        if(i+1<lines.length&&lines[i].includes('|')&&isTableSep(lines[i+1]))break;
+        para.push(lines[i++].trim());
+      }
+      if(para.length)out.push('<p>'+inlineDoc(para.join(' '))+'</p>');
+      else i++; // Defensive forward progress on malformed Markdown.
+    }
+    return out.join('')||'<p class="hint">Tidak ada isi draf untuk ditampilkan.</p>';
+  }
+  function copyText(source){
+    // Pasting into notes/telaahan should not contain raw ** and # markup.
+    return displaySource(source).split('\n').map(line=>{
+      if(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line))return '';
+      return line.replace(/^\s*#{1,5}\s+/,'').replace(/`([^`]+)`/g,'$1')
+        .replace(/\*\*([^*]+)\*\*/g,'$1').replace(/(^|[^*])\*([^*]+)\*(?!\*)/g,'$1$2')
+        .replace(/^\s*>\s?/,'').replace(/^\s*```\w*\s*$/,'');
+    }).join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  }
+  function resultHtml(){return `<div class="ai-result-note"><span class="ai-draft-mark">DRAF AI · WAJIB VERIFIKASI</span><small>Konsep awal, bukan dokumen resmi</small></div><article class="ai-document" aria-label="Pratinjau dokumen hasil AI">${renderDocument(currentOutput)}</article><details class="ai-raw-details"><summary>Lihat teks asli dari AI (Markdown)</summary><pre class="ai-original">${escape(currentOutput)}</pre></details><div class="actions ai-result-actions"><button class="btn sm secondary" data-action="ai-copy">Salin teks rapi</button><button class="btn sm secondary" data-action="ai-save-draft" ${myYearArchived()?'disabled':''}>Simpan draf terenkripsi</button>${mode==='telaahan'&&!myYearArchived()?'<button class="btn sm ghost" data-action="ai-to-review">Buka di formulir Telaahan</button>':''}</div>`}
+
   function previewUpdate(){const el=document.getElementById('aiPreview');if(el)el.textContent=getPreview();const c=document.getElementById('aiConsent');if(c)c.checked=false;}
   function change(e){if(e.target?.id==='aiMode'){mode=e.target.value;selected='';notes='';currentOutput='';currentSource='';render();return true}if(e.target?.id==='aiSource'){selected=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}return false}
   function input(e){if(e.target?.id==='aiNotes'){notes=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}return false}
@@ -135,13 +241,13 @@
     if(a==='ai-save-url'){try{if(myYearArchived())throw Error('Tahun sedang diarsipkan.');const url=endpoint(document.getElementById('aiWorkerUrl')?.value||'');data.aiSettings={...(data.aiSettings||{}),workerUrl:url};queueSave().then(()=>{render();toast('Alamat Worker AI tersimpan dalam brankas.')}).catch(fail)}catch(err){status(err.message,true)}return true}
     if(a==='ai-reset'){notes='';selected='';currentOutput='';render();return true}
     if(a==='ai-send'){send();return true}
-    if(a==='ai-copy'){if(currentOutput)navigator.clipboard.writeText(currentOutput).then(()=>toast('Hasil disalin.')).catch(()=>toast('Gagal menyalin. Periksa izin Safari.',true));return true}
+    if(a==='ai-copy'){if(currentOutput)navigator.clipboard.writeText(copyText(currentOutput)).then(()=>toast('Teks rapi disalin tanpa tanda Markdown.')).catch(()=>toast('Gagal menyalin. Periksa izin Safari.',true));return true}
     if(a==='ai-save-draft'){saveDraft().catch(fail);return true}
     if(a==='ai-open-draft'){const d=(data.aiDrafts||[]).find(x=>x.id===el.dataset.id&&Number(x.performanceYear)===myActiveYear());if(!d)return true;currentOutput=d.content;mode=MODES[d.mode]?d.mode:'telaahan';selected='';currentSource=d.sourceKey||'';notes='';render();return true}
     if(a==='ai-delete-draft'){if(myYearArchived())return true;if(!confirm('Hapus draf AI ini?'))return true;data.aiDrafts=(data.aiDrafts||[]).filter(x=>x.id!==el.dataset.id);queueSave().then(()=>{render();toast('Draf AI dihapus.')}).catch(fail);return true}
-    if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=currentOutput;const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
+    if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=copyText(currentOutput);const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
     return false;
   }
-  root.SIPETAK_AI={MODES,list,sourceText,compose,endpoint,page,action,change,input,clear};
-  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,endpoint};
+  root.SIPETAK_AI={MODES,list,sourceText,compose,endpoint,page,action,change,input,clear,renderDocument,displaySource,copyText};
+  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,endpoint,renderDocument,displaySource,copyText};
 })(typeof window!=='undefined'?window:globalThis);
