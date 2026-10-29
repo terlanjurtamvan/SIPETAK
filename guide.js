@@ -57,12 +57,26 @@
       'Pilih bulan untuk meninjau aksi, menyesuaikan target dan mengisi realisasi yang didukung bukti.',
       'Ekspor CSV atau cetak draf untuk pembahasan dengan atasan sebelum dijadikan acuan pribadi.'
     ],sample:'Target 24 bahan telaahan setahun → pembagian awal 2 per bulan. Target IKI 95% tetap 95% tiap bulan, bukan 95÷12.',note:'Target dan rumusan awal hanyalah usulan, bukan SKP yang telah disepakati. Bulan tanpa penugasan bukan 100% capaian.'},
+    {id:'otomasi',group:'Kinerja',label:'Pusat Otomasi — siklus, data, bukti & SKP',page:'otomasi',where:'Pusat Otomasi',required:'Cukup catat pekerjaan di menu biasanya dan tautkan bukti menggunakan pilihan pekerjaan yang tersedia.',steps:[
+      'Simpan pekerjaan di Catat Cepat, Tugas, Asisten Sekwan, Persidangan, atau DIM; siklus dasar dibuat otomatis.',
+      'Setelah pekerjaan mulai diproses, tahap awal diperbarui. Tahapan pemeriksaan, laporan dan arsip tetap perlu diputuskan pengguna.',
+      'Tambah bukti dari tugas atau pilih pekerjaan/agenda sumber pada formulir bukti; tautannya akan ditambahkan pada siklus tahun yang sama.',
+      'Buka Pusat Otomasi untuk melihat tenggat lewat, hasil selesai tanpa bukti, RHK belum dipetakan, dan relasi yang kurang lengkap.',
+      'Periksa bagian Bahan Verifikasi IKI/RHK sebelum mengisi realisasi resmi di menu SKP. Gunakan tombol Ekspor Draf jika diperlukan.'
+    ],sample:'Satu catatan “Menyusun konsep risalah Bamus” → status Proses → lampirkan referensi konsep risalah → ringkasan bukti tercantum di Pusat Otomasi.',note:'Statistik otomatis bukan angka capaian resmi atau persetujuan atasan. Push ketika aplikasi ditutup hanya bekerja jika Cloudflare Worker dan izin iPhone sudah diaktifkan.'},
     {id:'sla',group:'Pendukung',label:'Mengatur tenggat, bunyi dan kalender',page:'sla',where:'SLA & Pengingat',required:'Isi tanggal dan jam tenggat pada tugas, disposisi, atau rapat.',steps:[
       'Buat atau ubah tugas dan isi tanggal/jam tenggat sebenarnya.',
       'Buka SLA & Pengingat untuk melihat tenggat mendekat dan terlambat.',
       'Tekan “Aktifkan bunyi & notifikasi”, lalu “Uji bunyi” ketika aplikasi terbuka.',
       'Ekspor Kalender .ics bila menginginkan pengingat melalui Kalender MacBook/iPhone saat aplikasi ditutup.'
     ],sample:'Tenggat: “30 Oktober 2026 pukul 14.00”. Pengingat: 24 jam, 3 jam, 30 menit dan saat jatuh tempo.',note:'Web Push saat aplikasi tertutup membutuhkan layanan server dan izin OS; bunyi dapat dipengaruhi Mode Fokus atau volume.'},
+    {id:'smart-push',group:'Pendukung',label:'Notifikasi otomatis meskipun SIPETAK ditutup',page:'sla',where:'SLA & Pengingat → Smart Notification',required:'Login Supabase, aplikasi PWA terpasang di iPhone/Mac, dan layanan Worker sudah dikonfigurasi.',steps:[
+      'Pastikan pekerjaan mempunyai tenggat tanggal dan jam yang benar. Pastikan data lokal sudah dikirim ke Supabase.',
+      'Buka SLA & Pengingat, gulir ke Smart Notification dan tekan “Aktifkan Push di perangkat ini”.',
+      'Izinkan notifikasi pada iPhone/Mac. Gunakan “Uji Push Server” untuk memeriksa kiriman dari server.',
+      'Jika tenggat diubah atau pekerjaan selesai, pastikan jadwal tersinkron ketika perangkat terhubung internet.',
+      'Untuk menonaktifkan, gunakan “Matikan di perangkat ini”.'
+    ],sample:'Tenggat Jumat pukul 14.00 → notifikasi 24 jam, 3 jam, 30 menit, dan ketika waktu tercapai.',note:'Apple mengatur suara sistem sesuai Mode Fokus/Senyap. Layanan push menerima ID dan waktu, bukan isi dokumen. Jika perangkat offline, perubahan tenggat belum tentu tersinkron.'},
     {id:'laporan',group:'Kinerja',label:'Membuat laporan kerja dan arsip tahun',page:'laporan',where:'Laporan, Tahun Kinerja, Pengaturan',required:'Pekerjaan dan bukti sudah tercatat pada tahun yang tepat.',steps:[
       'Pilih tahun aktif untuk menentukan periode rekap.',
       'Buka Laporan, tentukan bulan yang diperlukan dan tinjau catatan pekerjaan.',
