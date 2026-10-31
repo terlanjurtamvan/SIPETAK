@@ -17,7 +17,7 @@
     dims:['title','perda','article','dueAt','status','current','issue','proposal','law','result'],
     evidence:['title','date','type','classification','description','rhkId']
   };
-  let mode='telaahan',selected='',selectedKeys=[],notes='',previewEdited=false,currentOutput='',currentSource='',currentTitle='',busy=false,abort=null;
+  let mode='telaahan',selected='',selectedKeys=[],notes='',previewEdited=false,currentOutput='',currentSource='',currentTitle='',busy=false,abort=null,localPlan=null;
   const maxPreview=7700;
   const clean=x=>String(x??'').replace(/\u0000/g,'').trim();
   const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -68,6 +68,102 @@
     if(!full)throw Error('Pilih catatan pekerjaan atau tuliskan konteks sendiri.');
     if(full.length>maxPreview)throw Error('Materi melebihi 7.700 karakter. Hapus informasi yang tidak diperlukan di pratinjau.');
     return {mode:which,sourceText:full,consent:true};
+  }
+  // TAHAP 6: rekomendasi berbasis aturan dibuat HANYA dari catatan yang dipilih.
+  // Tidak ada pemindaian seluruh brankas, perubahan data, atau pengiriman jaringan.
+  const localDate=(value)=>{
+    const m=clean(value).match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+    if(!m)return null;
+    const y=Number(m[1]),mo=Number(m[2]),d=Number(m[3]);
+    const date=new Date(y,mo-1,d,12,0,0);
+    return date.getFullYear()===y&&date.getMonth()+1===mo&&date.getDate()===d?date:null;
+  };
+  const localDay=(value)=>{const dt=localDate(value);return dt?`${String(dt.getFullYear())}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`:'';};
+  const priorityDate=(kind,record)=>{
+    const field={tasks:['deadlineAt','deadline'],directives:['dueAt'],meetings:['prepDueAt','minutesDueAt','meetingAt'],dims:['dueAt'],reviews:[],evidence:[]}[kind]||[];
+    return field.map(key=>localDay(record[key])).filter(Boolean).sort()[0]||'';
+  };
+  const doneStatus=s=>/^(selesai|tuntas|ditutup|final|disahkan|telah selesai)$/i.test(clean(s));
+  const suggestedStep=kind=>({tasks:'Periksa keluaran pekerjaan, selesaikan tahapan tersisa, dan perbarui status setelah bukti diperiksa.',directives:'Konfirmasi batas waktu dan siapkan tindak lanjut disposisi sesuai kewenangan.',meetings:'Periksa bahan rapat, ringkasan hasil, dan tenggat pekerjaan setelah rapat.',dims:'Periksa rumusan, isu hukum yang perlu diverifikasi, dan status pembahasan DIM.',reviews:'Periksa fakta, dasar hukum, alternatif, serta persetujuan atas konsep telaahan.',evidence:'Periksa kelengkapan metadata dan lokasi bukti pada penyimpanan yang disetujui.'}[kind]||'Periksa catatan dan tentukan tindak lanjut yang diperlukan.');
+  function localAnalysis(vault,year,keys,now=new Date(),which=mode){
+    if(!Array.isArray(keys)||keys.length<1||keys.length>3||new Set(keys).size!==keys.length)throw Error('Pilih 1 sampai 3 catatan berbeda untuk analisis lokal.');
+    const allowed=list(vault,year,which);
+    const base=new Date(now.getFullYear(),now.getMonth(),now.getDate(),12);
+    const entries=keys.map((key,index)=>{
+      const found=allowed.find(x=>x.key===key);
+      if(!found||found.special||!found.record||isRestricted(found.record))throw Error('Analisis lokal hanya berlaku untuk catatan biasa yang masih diizinkan.');
+      const row=found.record,deadline=priorityDate(found.collection,row),due=localDate(deadline);
+      const days=due?Math.round((due-base)/86400000):null;
+      const done=doneStatus(row.status),urgent=/^(tinggi|mendesak|urgent|kritik|kritis)$/i.test(clean(row.priority));
+      const score=done?0:(days!==null&&days<0?5:days!==null&&days<=3?4:days!==null&&days<=7?3:urgent?3:days!==null?2:1);
+      const flag=done?'Sudah ditandai selesai':days!==null&&days<0?'Lewat tenggat':days!==null&&days<=3?'Tenggat dekat':urgent?'Prioritas tinggi':days===null?'Tenggat tidak tersedia':'Dalam pemantauan';
+      const suggestion=done?'Periksa kelengkapan hasil dan bukti; jangan mengubah status tanpa kebutuhan.':suggestedStep(found.collection);
+      return {key,index:index+1,title:clean(row.title||row.perda||'Catatan tanpa judul').slice(0,110),kind:found.collection,deadline,days,status:clean(row.status)||'Belum dicatat',priority:clean(row.priority)||'Tidak dicatat',flag,score,suggestion};
+    });
+    entries.sort((a,b)=>b.score-a.score||a.index-b.index);
+    return {year:Number(year),which,keys:[...keys],entries};
+  }
+  function validLocalPlan(){
+    if(!localPlan||localPlan.year!==Number(myActiveYear())||localPlan.which!==mode||localPlan.keys.join('|')!==selectedKeys.join('|'))return null;
+    // Kaji ulang tiap pilihan, termasuk klasifikasi/status/tenggat yang mungkin berubah.
+    try{
+      const current=localAnalysis(data,myActiveYear(),selectedKeys,new Date(),mode);
+      return JSON.stringify(current.entries)===JSON.stringify(localPlan.entries)?localPlan:null;
+    }catch{return null}
+  }
+  function localPlanText(plan,includeTitles=false){
+    return ['RENCANA TINDAK LANJUT (SARAN LOKAL — BUKAN DISPOSISI ATAU KEPUTUSAN)','Tahun kinerja: '+plan.year,
+      ...plan.entries.map(x=>`Catatan pilihan ${x.index}${includeTitles?' ('+x.title+')':''}: ${x.flag}; status ${x.status}; tenggat ${x.deadline||'belum tersedia'}. Saran: ${x.suggestion}`),
+      'Verifikasi ulang fakta, tenggat, kewenangan, dan bukti sebelum menerapkan perubahan.'].join('\n');
+  }
+  function localPlanHtml(){
+    const plan=validLocalPlan();
+    if(!plan)return '<p class="hint">Belum ada analisis. Pilih catatan lalu tekan Analisis lokal. Tidak ada data yang dikirim.</p>';
+    return `<p class="hint">Analisis aturan sederhana dari ${plan.entries.length} catatan yang kamu pilih. Prioritas bukan perintah atasan atau penilaian resmi.</p>`+
+      plan.entries.map(x=>`<div class="ai-plan-item"><div class="ai-plan-line"><b>${escape(x.title)}</b><span class="ai-plan-flag">${escape(x.flag)}</span></div><p class="hint">${escape(x.kind)} · Status: ${escape(x.status)} · Tenggat: ${escape(x.deadline||'tidak tercatat')}</p><p>${escape(x.suggestion)}</p>${(['tasks','reviews'].includes(x.kind)&&!myYearArchived())?`<button type="button" class="btn ghost sm" data-action="ai-open-selected-form" data-key="${escape(x.key)}">Buka formulir untuk ditinjau</button>`:''}</div>`).join('')+
+      `<div class="actions"><button type="button" class="btn secondary sm" data-action="ai-use-plan">Tambahkan saran ke pratinjau AI</button><button type="button" class="btn ghost sm" data-action="ai-save-plan" ${myYearArchived()?'disabled':''}>Simpan rencana sebagai draf terenkripsi</button></div><p class="hint">Menambah saran akan menghapus persetujuan sebelumnya. Tidak ada perubahan status otomatis.</p>`;
+  }
+  function updateLocalPanel(){const out=document.getElementById('aiLocalResult');if(out)out.innerHTML=localPlanHtml();}
+  function invalidateLocalPlan(){localPlan=null;updateLocalPanel();}
+  function analyzeLocally(){
+    try{
+      localPlan=localAnalysis(data,myActiveYear(),selectedKeys,new Date(),mode);
+      updateLocalPanel();status('Analisis lokal selesai. Tidak ada catatan yang dikirim ke Worker.');
+    }catch(err){localPlan=null;updateLocalPanel();status(err.message,true)}
+  }
+  function useLocalPlan(){
+    const plan=validLocalPlan();if(!plan){status('Analisis sudah tidak sesuai dengan catatan terbaru. Buat analisis lokal lagi.',true);return}
+    const input=document.getElementById('aiPreview');if(!input){status('Kolom pratinjau tidak tersedia.',true);return}
+    const marker='RENCANA TINDAK LANJUT (SARAN LOKAL — BUKAN DISPOSISI ATAU KEPUTUSAN)';
+    // Tahan teks yang sudah dihapus pengguna; jangan menyisipkan kembali judul atau isi mentah.
+    const content=String(input.value||'');
+    const start=content.indexOf(marker);
+    const base=start<0?content:content.slice(0,start).trimEnd();
+    const merged=base.trimEnd()+'\n\n'+localPlanText(plan);
+    if(merged.length>maxPreview){status('Rencana melebihi kapasitas pratinjau. Ringkas atau hapus materi terlebih dahulu.',true);return}
+    input.value=merged;previewEdited=true;invalidateDraft();
+    const hint=document.getElementById('aiPreviewHint');if(hint)hint.textContent='Saran lokal ditambahkan. Sunting informasi sensitif dan centang persetujuan lagi jika ingin meminta draf AI.';
+    status('Saran telah ditambahkan ke pratinjau (BELUM DIKIRIM). Periksa kembali sebelum meminta AI.');
+  }
+  async function saveLocalPlan(){
+    const plan=validLocalPlan();if(!plan)throw Error('Jalankan ulang analisis sebelum menyimpan.');
+    if(myYearArchived())throw Error('Tahun kinerja sudah diarsipkan.');
+    if(!vaultKey||!data)throw Error('Buka brankas terlebih dahulu.');
+    if(!confirm('Simpan rekomendasi ini hanya sebagai DRAF dalam brankas terenkripsi? Tidak mengubah status pekerjaan.'))return;
+    const draft={id:uid('AI'),createdAt:isoNow(),performanceYear:myActiveYear(),mode:'harian',sourceKey:'',content:localPlanText(plan,true),classification:'Draf AI - belum diverifikasi'};
+    data.aiDrafts||=[];data.aiDrafts.push(draft);
+    if(data.aiDrafts.length>30)data.aiDrafts.splice(0,data.aiDrafts.length-30);
+    await queueSave();render();toast('Rencana disimpan terenkripsi sebagai draf. Status pekerjaan tidak berubah.');
+  }
+  function openSelectedForm(key){
+    const plan=validLocalPlan(),entry=plan?.entries.find(x=>x.key===key);
+    if(!entry||!['tasks','reviews'].includes(entry.kind)||myYearArchived())throw Error('Formulir catatan tidak tersedia atau pilihan berubah.');
+    // Bukalah formulir native. Pengguna sendiri yang meninjau dan menekan Simpan.
+    const item=list(data,myActiveYear(),mode).find(x=>x.key===key);
+    if(!item||isRestricted(item.record))throw Error('Catatan tidak lagi diizinkan.');
+    const kind=entry.kind==='tasks'?'task':'review';
+    navigate(kind==='task'?'tugas':'telaah');entityModal(kind,item.record.id);
+    toast('Formulir terbuka. Tidak ada perubahan yang disimpan otomatis.');
   }
   // Perlindungan tambahan di browser dan tetap diverifikasi ulang di Worker.
   const restrictedText=x=>/(?:^|\n)\s*(?:classification|klasifikasi)\s*:\s*(?:terbatas|rahasia|sangat rahasia|confidential|secret)\b/i.test(x);
@@ -129,6 +225,7 @@
     <div class="ai-grid"><section class="card ai-work"><h3>1 · Pilih bantuan AI</h3><div class="field"><label for="aiMode">Jenis bantuan</label><select id="aiMode">${opts}</select></div><p class="hint">${escape(MODES[mode].hint)}</p>
     <div class="field"><label for="aiSource">Pilih catatan kerja (tahun ${myActiveYear()}, maksimal 3)</label><select id="aiSource" ${selectedKeys.length>=3?'disabled':''}>${options()}</select><div class="ai-picked-list" id="aiSelectedSources">${selectedSummary()}</div><p class="hint" id="aiSourceCounter">${selectedKeys.length} dari 3 catatan dipilih. Sumber tidak pernah dipilih otomatis.</p></div>
     <div class="field"><label for="aiNotes">Konteks tambahan (maks. 1.800 karakter)</label><textarea id="aiNotes" rows="5" maxlength="1800" placeholder="Tujuan draf atau pertanyaan yang ingin dijawab. Jangan masukkan data rahasia/pribadi.">${escape(notes)}</textarea></div>
+    <section class="ai-plan-box" aria-label="Asisten Kerja Cerdas"><h3>✦ Asisten Kerja Cerdas · Analisis Lokal</h3><p class="hint">Analisis <b>hanya catatan yang dipilih</b> untuk menemukan tenggat, urutan prioritas, dan langkah berikutnya. Diproses di perangkat — tanpa koneksi AI, tanpa membaca seluruh brankas.</p><div class="actions"><button type="button" class="btn secondary sm" data-action="ai-local-analyze">Analisis 1–3 catatan terpilih</button></div><div id="aiLocalResult" role="status" aria-live="polite">${localPlanHtml()}</div></section>
     <h3>2 · Periksa dan sunting tepat apa yang akan dikirim</h3><p class="hint">Pratinjau ini dapat diedit untuk menghapus nama, data pribadi, dan rincian sensitif. <b>Hanya teks dalam kotak ini</b> yang dikirim setelah kamu memberi persetujuan. Tidak ada lampiran, ID internal, atau kunci brankas yang dikirim.</p><label for="aiPreview" class="hint">Materi untuk AI (maks. 7.700 karakter)</label><textarea id="aiPreview" class="ai-preview ai-preview-editable" rows="12" maxlength="7700" spellcheck="false">${escape(preview)}</textarea><p class="hint" id="aiPreviewHint">Sunting jika perlu; setiap perubahan membatalkan persetujuan sebelumnya.</p>
     <label class="ai-consent"><input type="checkbox" id="aiConsent"> <span>Saya sudah memeriksa teks di atas dan memastikan informasi ini <b>boleh diproses oleh penyedia AI</b> sesuai aturan instansi. Saya paham hasilnya hanya draf.</span></label>
     <div class="actions"><button type="button" class="btn" data-action="ai-send" ${busy?'disabled':''}>${busy?'Memproses…':'✦ Buat konsep dengan AI'}</button><button type="button" class="btn ghost" data-action="ai-reset">Kosongkan materi</button></div>
@@ -245,9 +342,9 @@
   function resultHtml(){return `<div class="ai-result-note"><span class="ai-draft-mark">DRAF AI · WAJIB VERIFIKASI</span><small>Konsep awal, bukan dokumen resmi</small></div><article class="ai-document" aria-label="Pratinjau dokumen hasil AI">${renderDocument(currentOutput)}</article><details class="ai-raw-details"><summary>Lihat teks asli dari AI (Markdown)</summary><pre class="ai-original">${escape(currentOutput)}</pre></details><div class="actions ai-result-actions"><button class="btn sm secondary" data-action="ai-copy">Salin teks rapi</button><button class="btn sm secondary" data-action="ai-save-draft" ${myYearArchived()?'disabled':''}>Simpan draf terenkripsi</button>${mode==='telaahan'&&!myYearArchived()?'<button class="btn sm ghost" data-action="ai-to-review">Buka di formulir Telaahan</button>':''}</div>`}
 
   function invalidateDraft(){currentOutput='';const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';const c=document.getElementById('aiConsent');if(c)c.checked=false;}
-  function previewUpdate(){previewEdited=false;const el=document.getElementById('aiPreview');if(el)el.value=getPreview();invalidateDraft();}
+  function previewUpdate(){invalidateLocalPlan();previewEdited=false;const el=document.getElementById('aiPreview');if(el)el.value=getPreview();invalidateDraft();}
   function change(e){
-    if(e.target?.id==='aiMode'){mode=e.target.value;selected='';selectedKeys=[];notes='';previewEdited=false;currentOutput='';currentSource='';render();return true}
+    if(e.target?.id==='aiMode'){localPlan=null;mode=e.target.value;selected='';selectedKeys=[];notes='';previewEdited=false;currentOutput='';currentSource='';render();return true}
     if(e.target?.id==='aiSource'){
       const key=e.target.value;
       if(!key)return true;
@@ -311,20 +408,24 @@
     finally{clearTimeout(timer);abort=null;busy=false;if(vaultKey&&view==='ai'){const b=document.querySelector('[data-action="ai-send"]');if(b){b.disabled=false;b.textContent='✦ Buat konsep dengan AI'}}}
   }
   async function saveDraft(){if(!currentOutput||!vaultKey||!data)throw Error('Belum ada hasil AI.');if(myYearArchived())throw Error('Tahun kinerja sudah diarsipkan.');data.aiDrafts||=[];const d={id:uid('AI'),createdAt:isoNow(),performanceYear:myActiveYear(),mode,sourceKey:currentSource,content:currentOutput,classification:'Draf AI - belum diverifikasi'};data.aiDrafts.push(d);if(data.aiDrafts.length>30)data.aiDrafts.splice(0,data.aiDrafts.length-30);await queueSave();render();toast('Konsep AI tersimpan terenkripsi sebagai draf, bukan dokumen resmi.')}
-  function clear(){abort?.abort();abort=null;busy=false;currentOutput='';currentSource='';notes='';selected='';selectedKeys=[];previewEdited=false;}
+  function clear(){abort?.abort();abort=null;busy=false;localPlan=null;currentOutput='';currentSource='';notes='';selected='';selectedKeys=[];previewEdited=false;}
   function action(el){const a=el?.dataset?.action;if(!a?.startsWith('ai-'))return false;
+    if(a==='ai-local-analyze'){analyzeLocally();return true}
+    if(a==='ai-use-plan'){useLocalPlan();return true}
+    if(a==='ai-save-plan'){saveLocalPlan().catch(err=>status(err.message,true));return true}
+    if(a==='ai-open-selected-form'){try{openSelectedForm(el.dataset.key)}catch(err){status(err.message,true)}return true}
     if(a==='ai-test-connection'){checkConnection();return true}
     if(a==='ai-save-url'){try{if(myYearArchived())throw Error('Tahun sedang diarsipkan.');const url=endpoint(document.getElementById('aiWorkerUrl')?.value||'');data.aiSettings={...(data.aiSettings||{}),workerUrl:url};queueSave().then(()=>{render();toast('Alamat Worker AI tersimpan dalam brankas.')}).catch(fail)}catch(err){status(err.message,true)}return true}
-    if(a==='ai-reset'){notes='';selected='';selectedKeys=[];previewEdited=false;currentOutput='';render();return true}
+    if(a==='ai-reset'){localPlan=null;notes='';selected='';selectedKeys=[];previewEdited=false;currentOutput='';render();return true}
     if(a==='ai-unpick'){selectedKeys=selectedKeys.filter(key=>key!==el.dataset.key);selected=selectedKeys[0]||'';sourcePickerUpdate();previewUpdate();return true}
     if(a==='ai-send'){send();return true}
     if(a==='ai-copy'){if(currentOutput)navigator.clipboard.writeText(copyText(currentOutput)).then(()=>toast('Teks rapi disalin tanpa tanda Markdown.')).catch(()=>toast('Gagal menyalin. Periksa izin Safari.',true));return true}
     if(a==='ai-save-draft'){saveDraft().catch(fail);return true}
-    if(a==='ai-open-draft'){const d=(data.aiDrafts||[]).find(x=>x.id===el.dataset.id&&Number(x.performanceYear)===myActiveYear());if(!d)return true;currentOutput=d.content;mode=MODES[d.mode]?d.mode:'telaahan';selected='';selectedKeys=[];previewEdited=false;currentSource=d.sourceKey||'';notes='';render();return true}
+    if(a==='ai-open-draft'){localPlan=null;const d=(data.aiDrafts||[]).find(x=>x.id===el.dataset.id&&Number(x.performanceYear)===myActiveYear());if(!d)return true;currentOutput=d.content;mode=MODES[d.mode]?d.mode:'telaahan';selected='';selectedKeys=[];previewEdited=false;currentSource=d.sourceKey||'';notes='';render();return true}
     if(a==='ai-delete-draft'){if(myYearArchived())return true;if(!confirm('Hapus draf AI ini?'))return true;data.aiDrafts=(data.aiDrafts||[]).filter(x=>x.id!==el.dataset.id);queueSave().then(()=>{render();toast('Draf AI dihapus.')}).catch(fail);return true}
     if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=copyText(currentOutput);const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
     return false;
   }
-  root.SIPETAK_AI={MODES,list,sourceText,compose,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
-  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,endpoint,healthText,checkConnection,renderDocument,displaySource,copyText};
+  root.SIPETAK_AI={MODES,list,sourceText,compose,localAnalysis,localPlanText,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
+  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,localAnalysis,localPlanText,endpoint,healthText,checkConnection,renderDocument,displaySource,copyText};
 })(typeof window!=='undefined'?window:globalThis);

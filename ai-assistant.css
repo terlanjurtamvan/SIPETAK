@@ -34,3 +34,12 @@
 .ai-preview-editable{display:block;width:100%;min-height:230px;max-height:390px;resize:vertical;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:anywhere}
 .ai-preview-editable:focus-visible{outline:2px solid var(--app-accent,#6553d8);outline-offset:2px}
 @media(max-width:500px){.ai-picked{align-items:flex-start}.ai-picked .btn{padding:7px 10px}}
+
+/* JARVIS Tahap 6 — analisis lokal atas catatan yang dipilih saja. */
+.ai-plan-box{margin:18px 0;padding:15px;border:1px solid var(--app-border,var(--line,#d6d9e0));background:var(--app-elevated,#f8f9fc);border-radius:13px;min-width:0}
+.ai-plan-box h3{margin:0 0 8px}.ai-plan-box .actions{margin:10px 0}
+.ai-plan-item{padding:12px 0;border-bottom:1px solid var(--app-border,var(--line,#ddd));overflow-wrap:anywhere}
+.ai-plan-item:last-of-type{border-bottom:0}.ai-plan-item p{margin:7px 0;line-height:1.5;font-size:.87rem}
+.ai-plan-line{display:flex;gap:8px;justify-content:space-between;align-items:flex-start;flex-wrap:wrap}
+.ai-plan-flag{border:1px solid var(--app-border,#ddd);border-radius:8px;font-size:.74rem;padding:4px 7px;color:var(--app-muted,#555)}
+@media(max-width:500px){.ai-plan-box{padding:12px}.ai-plan-box .actions .btn{width:100%}}
