@@ -17,11 +17,11 @@
     dims:['title','perda','article','dueAt','status','current','issue','proposal','law','result'],
     evidence:['title','date','type','classification','description','rhkId']
   };
-  let mode='telaahan',selected='',notes='',currentOutput='',currentSource='',currentTitle='',busy=false,abort=null;
+  let mode='telaahan',selected='',selectedKeys=[],notes='',previewEdited=false,currentOutput='',currentSource='',currentTitle='',busy=false,abort=null;
   const maxPreview=7700;
   const clean=x=>String(x??'').replace(/\u0000/g,'').trim();
   const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const isRestricted=r=>/^(terbatas|rahasia|sangat rahasia|confidential|secret)$/i.test(clean(r?.classification));
+  const isRestricted=r=>/^(?:sangat\s+rahasia|rahasia|terbatas|confidential|secret)(?:\b|$)/i.test(clean(r?.classification));
   function list(vault,year,which=mode){
     const config=MODES[which];if(!config)return [];
     const arr=[];
@@ -41,9 +41,11 @@
     if(!item)throw Error('Catatan tidak ditemukan atau tidak diizinkan untuk AI.');
     if(item.special==='skp'){
       const m=new Date().getFullYear()===Number(year)?new Date().getMonth()+1:1;
-      const s=root.SIPETAK_AUTOMATION?.summarize(vault,year,m);
+      // Ringkasan hanya dari metadata catatan yang tidak berklasifikasi terbatas.
+      const safe={...vault};for(const name of ['tasks','reviews','directives','meetings','dims','evidence','skpActions','rhks','ikis'])if(Array.isArray(vault[name]))safe[name]=vault[name].filter(x=>!isRestricted(x));
+      const s=root.SIPETAK_AUTOMATION?.summarize(safe,year,m);
       if(!s)return 'Tidak ada ringkasan yang tersedia.';
-      return `Tahun: ${year}, bulan: ${m}\nPekerjaan tercatat: ${s.total}\nPekerjaan selesai: ${s.done}\nPekerjaan selesai dengan hasil dan bukti metadata lengkap: ${s.proven}\nRHK (hitungan draf): ${JSON.stringify(s.byRhk.map((x,i)=>({rhk:clean((vault.rhks||[]).find(r=>r.id===x.key)?.title||`RHK ${i+1}`),pekerjaan:x.tasks,selesai:x.completed,berbukti:x.supported})))}\nIKI (hitungan draf): ${JSON.stringify(s.byIki.map((x,i)=>({indikator:`IKI ${i+1} (periksa kode indikator di SIPETAK)`,pekerjaan:x.tasks,selesai:x.completed,berbukti:x.supported})))}\nPERINGATAN: angka tersebut bukan realisasi SKP resmi, bukan validasi kualitas bukti.`;
+      return `Tahun: ${year}, bulan: ${m}\nPekerjaan tercatat: ${s.total}\nPekerjaan selesai: ${s.done}\nPekerjaan selesai dengan hasil dan bukti metadata lengkap: ${s.proven}\nRHK (hitungan draf): ${JSON.stringify(s.byRhk.map((x,i)=>({rhk:clean((safe.rhks||[]).find(r=>r.id===x.key)?.title||`RHK ${i+1}`),pekerjaan:x.tasks,selesai:x.completed,berbukti:x.supported})))}\nIKI (hitungan draf): ${JSON.stringify(s.byIki.map((x,i)=>({indikator:`IKI ${i+1} (periksa kode indikator di SIPETAK)`,pekerjaan:x.tasks,selesai:x.completed,berbukti:x.supported})))}\nPERINGATAN: angka tersebut bukan realisasi SKP resmi, bukan validasi kualitas bukti.`;
     }
     if(item.special==='alerts'){
       const keyByKind={task:'tasks',review:'reviews',directive:'directives',meeting:'meetings',dim:'dims',evidence:'evidence',skp:'skpActions'};
@@ -54,15 +56,21 @@
     const row=Object.fromEntries((FIELDS[item.collection]||[]).filter(k=>typeof item.record[k]==='string'&&clean(item.record[k])).map(k=>[k,clean(item.record[k])]));
     return `Jenis: ${item.collection}\nTahun: ${year}\n`+Object.entries(row).map(([k,v])=>`${k}: ${v}`).join('\n');
   }
-  function compose(vault,year,which=mode,key=selected,extra=notes){
+  // Sumber yang dipilih eksplisit; tidak menyalin seluruh brankas, ID atau lampiran.
+  function compose(vault,year,which=mode,key=selectedKeys,extra=notes){
     if(!MODES[which])throw Error('Jenis bantuan AI tidak dikenali.');
-    const src=sourceText(vault,year,key,which),note=clean(extra);
+    const keys=(Array.isArray(key)?key:[key]).filter(Boolean);
+    if(keys.length>3||new Set(keys).size!==keys.length)throw Error('Pilih maksimal 3 catatan berbeda.');
+    const src=keys.map((id,i)=>'CATATAN TERPILIH '+(i+1)+':\n'+sourceText(vault,year,id,which)).join('\n\n---\n\n');
+    const note=clean(extra);
     if(note.length>1800)throw Error('Catatan tambahan maksimal 1.800 karakter.');
-    const full=[src&&'MATERI CATATAN TERPILIH:\n'+src,note&&'KONTEKS YANG ANDA KETIK:\n'+note].filter(Boolean).join('\n\n');
+    const full=[src,note&&'KONTEKS YANG ANDA KETIK:\n'+note].filter(Boolean).join('\n\n');
     if(!full)throw Error('Pilih catatan pekerjaan atau tuliskan konteks sendiri.');
-    if(full.length>maxPreview)throw Error('Materi melebihi 7.700 karakter. Ringkas catatan terlebih dahulu.');
+    if(full.length>maxPreview)throw Error('Materi melebihi 7.700 karakter. Hapus informasi yang tidak diperlukan di pratinjau.');
     return {mode:which,sourceText:full,consent:true};
   }
+  // Perlindungan tambahan di browser dan tetap diverifikasi ulang di Worker.
+  const restrictedText=x=>/(?:^|\n)\s*(?:classification|klasifikasi)\s*:\s*(?:terbatas|rahasia|sangat rahasia|confidential|secret)\b/i.test(x);
   // Jangan pernah kirim token Supabase ke hostname Worker sembarang.
   // Host di bawah berasal dari dokumentasi Worker SIPETAK yang diunggah.
   // Jika deployment dipindahkan, daftar ini harus ditinjau di source code.
@@ -109,16 +117,19 @@
     }finally{clearTimeout(timer);if(btn){btn.disabled=false;btn.textContent='Uji koneksi AI'}}
   }
   function savedUrl(){return clean(data?.aiSettings?.workerUrl||document.querySelector('meta[name="sipetak-ai-worker-url"]')?.content||'');}
-  function options(){return `<option value="">— Ketik konteks sendiri / tanpa sumber —</option>`+list(data,myActiveYear()).map(x=>`<option value="${escape(x.key)}" ${x.key===selected?'selected':''}>${escape(x.label)}</option>`).join('')}
+  function options(){return `<option value="">— Pilih catatan untuk ditambahkan —</option>`+list(data,myActiveYear()).filter(x=>!selectedKeys.includes(x.key)).map(x=>`<option value="${escape(x.key)}">${escape(x.label)}</option>`).join('')}
+  function selectedSummary(){const allowed=list(data,myActiveYear());const picks=selectedKeys.map(key=>allowed.find(x=>x.key===key)).filter(Boolean);
+    return picks.length?picks.map(x=>`<div class="ai-picked"><span>${escape(x.label)}</span><button class="btn ghost sm" type="button" data-action="ai-unpick" data-key="${escape(x.key)}" aria-label="Hapus ${escape(x.label)}">Hapus</button></div>`).join(''):'<p class="hint">Belum ada catatan dipilih. Kamu tetap dapat mengetik konteks sendiri.</p>'}
+  function sourcePickerUpdate(){const target=document.getElementById('aiSelectedSources');if(target)target.innerHTML=selectedSummary();const sel=document.getElementById('aiSource');if(sel){sel.innerHTML=options();sel.disabled=selectedKeys.length>=3}const counter=document.getElementById('aiSourceCounter');if(counter)counter.textContent=selectedKeys.length+' dari 3 catatan dipilih.';}
   function getPreview(){try{return compose(data,myActiveYear()).sourceText}catch(e){return 'Belum ada materi untuk dikirim: '+e.message}}
   function drafts(){return (data.aiDrafts||[]).filter(x=>Number(x.performanceYear)===Number(myActiveYear())).slice().reverse().slice(0,15)}
   function page(){const opts=Object.entries(MODES).map(([id,m])=>`<option value="${id}" ${mode===id?'selected':''}>${escape(m.label)}</option>`).join(''),url=savedUrl(),preview=getPreview();
-    return `<div class="section-head"><div><h3>✦ Asisten AI SIPETAK</h3><p>Lima alat bantu penyusunan konsep. Anda memilih materi yang dikirim dan memeriksa setiap hasil.</p></div><button class="btn ghost" data-action="navigate" data-view="panduan">Panduan →</button></div>
+    return `<div class="section-head"><div><h3>✦ Asisten AI SIPETAK</h3><p>Pilih hingga 3 catatan, sunting materi yang boleh dikirim, lalu buat draf hanya setelah persetujuan.</p></div><button class="btn ghost" data-action="navigate" data-view="panduan">Panduan →</button></div>
     <div class="callout warn"><b>Perhatian data kedinasan:</b> layanan AI eksternal menerima teks yang disetujui. Jangan mengirim data rahasia, pribadi, dokumen belum diizinkan instansi, atau berkas berklasifikasi Terbatas. Lampiran tidak dikirim otomatis. AI dapat keliru dan tidak mengesahkan keputusan, hukum, risalah, atau SKP.</div>
     <div class="ai-grid"><section class="card ai-work"><h3>1 · Pilih bantuan AI</h3><div class="field"><label for="aiMode">Jenis bantuan</label><select id="aiMode">${opts}</select></div><p class="hint">${escape(MODES[mode].hint)}</p>
-    <div class="field"><label for="aiSource">Catatan yang akan digunakan (tahun ${myActiveYear()})</label><select id="aiSource">${options()}</select></div>
-    <div class="field"><label for="aiNotes">Konteks tambahan (maks. 1.800 karakter)</label><textarea id="aiNotes" rows="5" maxlength="1800" placeholder="Uraikan fakta yang aman dan boleh dikirim, tujuan draf, atau pertanyaan yang ingin dijawab.">${escape(notes)}</textarea></div>
-    <h3>2 · Periksa tepat apa yang akan dikirim</h3><p class="hint">Tidak ada data lain dari brankas yang dikirim. ID internal, file lampiran, dan kunci brankas tidak disertakan.</p><pre id="aiPreview" class="ai-preview">${escape(preview)}</pre>
+    <div class="field"><label for="aiSource">Pilih catatan kerja (tahun ${myActiveYear()}, maksimal 3)</label><select id="aiSource" ${selectedKeys.length>=3?'disabled':''}>${options()}</select><div class="ai-picked-list" id="aiSelectedSources">${selectedSummary()}</div><p class="hint" id="aiSourceCounter">${selectedKeys.length} dari 3 catatan dipilih. Sumber tidak pernah dipilih otomatis.</p></div>
+    <div class="field"><label for="aiNotes">Konteks tambahan (maks. 1.800 karakter)</label><textarea id="aiNotes" rows="5" maxlength="1800" placeholder="Tujuan draf atau pertanyaan yang ingin dijawab. Jangan masukkan data rahasia/pribadi.">${escape(notes)}</textarea></div>
+    <h3>2 · Periksa dan sunting tepat apa yang akan dikirim</h3><p class="hint">Pratinjau ini dapat diedit untuk menghapus nama, data pribadi, dan rincian sensitif. <b>Hanya teks dalam kotak ini</b> yang dikirim setelah kamu memberi persetujuan. Tidak ada lampiran, ID internal, atau kunci brankas yang dikirim.</p><label for="aiPreview" class="hint">Materi untuk AI (maks. 7.700 karakter)</label><textarea id="aiPreview" class="ai-preview ai-preview-editable" rows="12" maxlength="7700" spellcheck="false">${escape(preview)}</textarea><p class="hint" id="aiPreviewHint">Sunting jika perlu; setiap perubahan membatalkan persetujuan sebelumnya.</p>
     <label class="ai-consent"><input type="checkbox" id="aiConsent"> <span>Saya sudah memeriksa teks di atas dan memastikan informasi ini <b>boleh diproses oleh penyedia AI</b> sesuai aturan instansi. Saya paham hasilnya hanya draf.</span></label>
     <div class="actions"><button type="button" class="btn" data-action="ai-send" ${busy?'disabled':''}>${busy?'Memproses…':'✦ Buat konsep dengan AI'}</button><button type="button" class="btn ghost" data-action="ai-reset">Kosongkan materi</button></div>
     <div id="aiStatus" role="status" aria-live="polite" class="hint">${busy?'Menghubungi layanan AI…':'AI hanya berjalan ketika Anda menekan tombol dan menyetujui materinya.'}</div></section>
@@ -233,14 +244,40 @@
   }
   function resultHtml(){return `<div class="ai-result-note"><span class="ai-draft-mark">DRAF AI · WAJIB VERIFIKASI</span><small>Konsep awal, bukan dokumen resmi</small></div><article class="ai-document" aria-label="Pratinjau dokumen hasil AI">${renderDocument(currentOutput)}</article><details class="ai-raw-details"><summary>Lihat teks asli dari AI (Markdown)</summary><pre class="ai-original">${escape(currentOutput)}</pre></details><div class="actions ai-result-actions"><button class="btn sm secondary" data-action="ai-copy">Salin teks rapi</button><button class="btn sm secondary" data-action="ai-save-draft" ${myYearArchived()?'disabled':''}>Simpan draf terenkripsi</button>${mode==='telaahan'&&!myYearArchived()?'<button class="btn sm ghost" data-action="ai-to-review">Buka di formulir Telaahan</button>':''}</div>`}
 
-  function previewUpdate(){const el=document.getElementById('aiPreview');if(el)el.textContent=getPreview();const c=document.getElementById('aiConsent');if(c)c.checked=false;}
-  function change(e){if(e.target?.id==='aiMode'){mode=e.target.value;selected='';notes='';currentOutput='';currentSource='';render();return true}if(e.target?.id==='aiSource'){selected=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}return false}
-  function input(e){if(e.target?.id==='aiNotes'){notes=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}if(e.target?.id==='aiWorkerUrl'){const el=document.getElementById('aiHealthStatus');if(el){el.textContent='Alamat berubah. Tekan Uji koneksi AI untuk memeriksa alamat baru.';el.classList.remove('ai-error')}return true}return false}
+  function invalidateDraft(){currentOutput='';const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';const c=document.getElementById('aiConsent');if(c)c.checked=false;}
+  function previewUpdate(){previewEdited=false;const el=document.getElementById('aiPreview');if(el)el.value=getPreview();invalidateDraft();}
+  function change(e){
+    if(e.target?.id==='aiMode'){mode=e.target.value;selected='';selectedKeys=[];notes='';previewEdited=false;currentOutput='';currentSource='';render();return true}
+    if(e.target?.id==='aiSource'){
+      const key=e.target.value;
+      if(!key)return true;
+      if(!list(data,myActiveYear()).some(x=>x.key===key)){status('Catatan tidak tersedia atau tidak diizinkan untuk AI.',true);e.target.value='';return true}
+      if(selectedKeys.length>=3){status('Maksimal 3 catatan. Hapus pilihan lain terlebih dahulu.',true);e.target.value='';return true}
+      if(!selectedKeys.includes(key))selectedKeys.push(key);
+      selected=selectedKeys[0]||'';sourcePickerUpdate();previewUpdate();return true;
+    }
+    return false;
+  }
+  function input(e){
+    if(e.target?.id==='aiNotes'){notes=e.target.value;previewUpdate();return true}
+    if(e.target?.id==='aiPreview'){previewEdited=true;invalidateDraft();const hint=document.getElementById('aiPreviewHint');if(hint)hint.textContent='Materi disunting. Periksa ulang dan centang persetujuan sebelum mengirim.';return true}
+    if(e.target?.id==='aiWorkerUrl'){const el=document.getElementById('aiHealthStatus');if(el){el.textContent='Alamat berubah. Tekan Uji koneksi AI untuk memeriksa alamat baru.';el.classList.remove('ai-error')}return true}
+    return false;
+  }
   function status(text,bad=false){const el=document.getElementById('aiStatus');if(el){el.textContent=text;el.classList.toggle('ai-error',bad)}else if(bad)toast(text,true)}
   async function send(){if(busy)return;let payload,url;
-    try{if(!document.getElementById('aiConsent')?.checked)throw Error('Centang persetujuan setelah membaca materi yang akan dikirim.');payload=compose(data,myActiveYear());url=endpoint(savedUrl());if(!window.SIPETAK_SB_AI_TOKEN)throw Error('Penghubung Supabase belum tersedia.');}
-    catch(err){status(err.message,true);return}
-    busy=true;currentOutput='';currentSource=selected;const requestMode=mode,requestSelected=selected,requestNotes=notes;const btn=document.querySelector('[data-action="ai-send"]');if(btn){btn.disabled=true;btn.textContent='Memproses…'}status('Menghubungi AI. Jangan tutup aplikasi selama membuat konsep.');
+    try{
+      if(!document.getElementById('aiConsent')?.checked)throw Error('Centang persetujuan setelah membaca materi yang akan dikirim.');
+      // Validasi ulang daftar pilihan pada tahun aktif untuk mencegah kebocoran
+      // jika data atau klasifikasinya berubah setelah pratinjau disusun.
+      if(selectedKeys.length)for(const key of selectedKeys)sourceText(data,myActiveYear(),key,mode);
+      const exactText=String(document.getElementById('aiPreview')?.value||'');
+      if(exactText.trim().length<4||exactText.length>maxPreview||exactText.startsWith('Belum ada materi untuk dikirim:'))throw Error('Materi belum valid. Pilih catatan atau ketik konteks yang boleh dikirim.');
+      if(restrictedText(exactText))throw Error('Materi berlabel rahasia/terbatas tidak boleh dikirim.');
+      payload={mode,sourceText:exactText,consent:true};
+      url=endpoint(savedUrl());if(!window.SIPETAK_SB_AI_TOKEN)throw Error('Penghubung Supabase belum tersedia.');
+    }catch(err){status(err.message,true);return}
+    busy=true;currentOutput='';currentSource=selectedKeys.length===1?selectedKeys[0]:'';const requestMode=mode,requestSelected=selectedKeys.join('|'),requestNotes=notes,requestPreview=payload.sourceText;const btn=document.querySelector('[data-action="ai-send"]');if(btn){btn.disabled=true;btn.textContent='Memproses…'}status('Menghubungi AI. Jangan tutup aplikasi selama membuat konsep.');
     abort=new AbortController();const timer=setTimeout(()=>abort?.abort(),45000);
     try{
       const requestBody=JSON.stringify(payload);
@@ -267,22 +304,23 @@
         throw Error(tips[code]||body.error||'Layanan AI gagal (HTTP '+response.status+').');
       }
       if(!body.draft||typeof body.draft!=='string')throw Error('Layanan AI tidak menghasilkan teks.');
-      if(!vaultKey||!data||view!=='ai'||mode!==requestMode||selected!==requestSelected||notes!==requestNotes)return;
+      if(!vaultKey||!data||view!=='ai'||mode!==requestMode||selectedKeys.join('|')!==requestSelected||notes!==requestNotes||String(document.getElementById('aiPreview')?.value||'')!==requestPreview)return;
       currentOutput=body.draft.slice(0,12000);
       document.getElementById('aiResult').innerHTML=resultHtml();status('Draf berhasil dibuat. Periksa fakta, pasal, dan ketepatan hasil sebelum digunakan.');
     }catch(err){if(vaultKey&&view==='ai')status(err.name==='AbortError'?'Waktu koneksi AI habis. Coba lagi.':err.message,true)}
     finally{clearTimeout(timer);abort=null;busy=false;if(vaultKey&&view==='ai'){const b=document.querySelector('[data-action="ai-send"]');if(b){b.disabled=false;b.textContent='✦ Buat konsep dengan AI'}}}
   }
   async function saveDraft(){if(!currentOutput||!vaultKey||!data)throw Error('Belum ada hasil AI.');if(myYearArchived())throw Error('Tahun kinerja sudah diarsipkan.');data.aiDrafts||=[];const d={id:uid('AI'),createdAt:isoNow(),performanceYear:myActiveYear(),mode,sourceKey:currentSource,content:currentOutput,classification:'Draf AI - belum diverifikasi'};data.aiDrafts.push(d);if(data.aiDrafts.length>30)data.aiDrafts.splice(0,data.aiDrafts.length-30);await queueSave();render();toast('Konsep AI tersimpan terenkripsi sebagai draf, bukan dokumen resmi.')}
-  function clear(){abort?.abort();abort=null;busy=false;currentOutput='';currentSource='';notes='';selected='';}
+  function clear(){abort?.abort();abort=null;busy=false;currentOutput='';currentSource='';notes='';selected='';selectedKeys=[];previewEdited=false;}
   function action(el){const a=el?.dataset?.action;if(!a?.startsWith('ai-'))return false;
     if(a==='ai-test-connection'){checkConnection();return true}
     if(a==='ai-save-url'){try{if(myYearArchived())throw Error('Tahun sedang diarsipkan.');const url=endpoint(document.getElementById('aiWorkerUrl')?.value||'');data.aiSettings={...(data.aiSettings||{}),workerUrl:url};queueSave().then(()=>{render();toast('Alamat Worker AI tersimpan dalam brankas.')}).catch(fail)}catch(err){status(err.message,true)}return true}
-    if(a==='ai-reset'){notes='';selected='';currentOutput='';render();return true}
+    if(a==='ai-reset'){notes='';selected='';selectedKeys=[];previewEdited=false;currentOutput='';render();return true}
+    if(a==='ai-unpick'){selectedKeys=selectedKeys.filter(key=>key!==el.dataset.key);selected=selectedKeys[0]||'';sourcePickerUpdate();previewUpdate();return true}
     if(a==='ai-send'){send();return true}
     if(a==='ai-copy'){if(currentOutput)navigator.clipboard.writeText(copyText(currentOutput)).then(()=>toast('Teks rapi disalin tanpa tanda Markdown.')).catch(()=>toast('Gagal menyalin. Periksa izin Safari.',true));return true}
     if(a==='ai-save-draft'){saveDraft().catch(fail);return true}
-    if(a==='ai-open-draft'){const d=(data.aiDrafts||[]).find(x=>x.id===el.dataset.id&&Number(x.performanceYear)===myActiveYear());if(!d)return true;currentOutput=d.content;mode=MODES[d.mode]?d.mode:'telaahan';selected='';currentSource=d.sourceKey||'';notes='';render();return true}
+    if(a==='ai-open-draft'){const d=(data.aiDrafts||[]).find(x=>x.id===el.dataset.id&&Number(x.performanceYear)===myActiveYear());if(!d)return true;currentOutput=d.content;mode=MODES[d.mode]?d.mode:'telaahan';selected='';selectedKeys=[];previewEdited=false;currentSource=d.sourceKey||'';notes='';render();return true}
     if(a==='ai-delete-draft'){if(myYearArchived())return true;if(!confirm('Hapus draf AI ini?'))return true;data.aiDrafts=(data.aiDrafts||[]).filter(x=>x.id!==el.dataset.id);queueSave().then(()=>{render();toast('Draf AI dihapus.')}).catch(fail);return true}
     if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=copyText(currentOutput);const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
     return false;

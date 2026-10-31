@@ -25,3 +25,12 @@
 .ai-drafts{display:grid;gap:8px}.ai-draft{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--app-border,var(--line,#ddd));border-radius:12px}.ai-draft>div:first-child{min-width:0}.ai-draft small{display:block;color:var(--app-muted,var(--muted,#777));margin-top:4px}.ai-error{color:var(--app-danger,#ba3c32);font-weight:700}
 @media(max-width:780px){.ai-grid{grid-template-columns:1fr}.ai-draft{align-items:start;flex-direction:column}.ai-document{font-size:1rem;line-height:1.75}.ai-document .ai-meta-row{grid-template-columns:minmax(68px,26%) minmax(0,1fr)}.ai-result-actions .btn{min-height:38px}}
 @media print{.ai-document{border:none;box-shadow:none;padding:0;background:white;color:black;line-height:1.6}.ai-result-actions,.ai-raw-details{display:none!important}}
+
+/* JARVIS Tahap 5: pilih sumber terbatas dan sunting materi secara lokal. */
+.ai-picked-list{display:grid;gap:7px;margin-top:10px}
+.ai-picked{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:9px 10px;border:1px solid var(--app-border,var(--line,#d6d9e0));border-radius:10px;background:var(--app-elevated,#f6f7fb)}
+.ai-picked span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:.88rem}
+.ai-picked .btn{flex:none}
+.ai-preview-editable{display:block;width:100%;min-height:230px;max-height:390px;resize:vertical;box-sizing:border-box;white-space:pre-wrap;overflow-wrap:anywhere}
+.ai-preview-editable:focus-visible{outline:2px solid var(--app-accent,#6553d8);outline-offset:2px}
+@media(max-width:500px){.ai-picked{align-items:flex-start}.ai-picked .btn{padding:7px 10px}}
