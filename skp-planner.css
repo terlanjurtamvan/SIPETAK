@@ -10,3 +10,16 @@
 .skp-ptk-reference{margin-top:1rem}.skp-ptk-focus{background:var(--surface-2,#f6f6fc);border:1px solid var(--border,#d5d9e9);border-radius:14px;padding:1rem;margin:1rem 0}.skp-ptk-focus p{margin:.5rem 0;line-height:1.6}.skp-ptk-focus div{font-size:.86rem;line-height:1.5}
 .skp-ptk-details{border:1px solid var(--border,#d5d9e9);border-radius:12px;margin:.8rem 0}.skp-ptk-details>summary,.skp-ptk-procedures summary{cursor:pointer;padding:.9rem;font-weight:650;line-height:1.45}.skp-ptk-procedures{padding:0 .75rem .75rem}.skp-ptk-procedures details{border-top:1px solid var(--border,#d5d9e9);margin:.25rem 0}.skp-ptk-procedures ol{padding-left:1.45rem;line-height:1.65}.skp-ptk-procedures li{margin:.45rem 0}.skp-ptk-procedures p{line-height:1.5;font-size:.86rem;margin:.55rem 0}
 @media(max-width:720px){.skp-role-switch{display:grid;grid-template-columns:1fr 1fr}.skp-role-switch .btn{min-height:44px;padding:.5rem}.skp-ptk-focus{padding:.8rem}}
+
+/* RACI per aksi: tambahan pada v3.8.10, responsif tanpa mengubah layout lama. */
+.skp-raci-empty{margin-top:.75rem;border-left:3px solid var(--border,#d5d9e9);padding:.45rem .7rem;font-size:.79rem;color:var(--text-muted,#63708a)}
+.skp-raci-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem .7rem;margin-top:.75rem}
+.skp-raci-line{display:flex;align-items:flex-start;gap:.45rem;min-width:0;font-size:.81rem;line-height:1.5}
+.skp-raci-line>b{display:inline-flex;flex:0 0 auto;justify-content:center;min-width:1.6rem;padding:.14rem .32rem;border-radius:6px;border:1px solid var(--border,#d5d9e9);background:var(--surface-2,#f1effd)}
+.skp-raci-line>span{min-width:0;overflow-wrap:anywhere;white-space:pre-line}
+.skp-raci-line i{font-style:normal;color:var(--text-muted,#63708a)}
+.skp-raci-note{display:block;color:var(--text-muted,#63708a);font-size:.73rem;margin-top:.4rem}
+.skp-raci-form-head{border-top:1px solid var(--border,#d5d9e9);padding-top:.65rem;margin-top:.45rem}
+.skp-raci-form-head h4{margin:0 0 .4rem;font-size:.96rem}
+.skp-raci-form-head p{line-height:1.55;margin:.3rem 0}
+@media(max-width:720px){.skp-raci-summary{grid-template-columns:1fr}.skp-raci-line{font-size:.84rem}}
