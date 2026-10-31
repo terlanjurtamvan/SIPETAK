@@ -17,7 +17,7 @@
     dims:['title','perda','article','dueAt','status','current','issue','proposal','law','result'],
     evidence:['title','date','type','classification','description','rhkId']
   };
-  let mode='telaahan',selected='',selectedKeys=[],notes='',previewEdited=false,currentOutput='',currentSource='',currentTitle='',busy=false,abort=null,localPlan=null;
+  let mode='telaahan',selected='',selectedKeys=[],notes='',previewEdited=false,currentOutput='',currentSource='',currentTitle='',busy=false,abort=null,localPlan=null,dashSnapshot=null,dashCategories=['tasks','directives','meetings'];
   const maxPreview=7700;
   const clean=x=>String(x??'').replace(/\u0000/g,'').trim();
   const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -165,6 +165,102 @@
     navigate(kind==='task'?'tugas':'telaah');entityModal(kind,item.record.id);
     toast('Formulir terbuka. Tidak ada perubahan yang disimpan otomatis.');
   }
+  // TAHAP 7: dashboard opt-in dari METADATA tahun/kategori yang dipilih.
+  // Tidak otomatis meninjau isi brankas atau mengirim permintaan jaringan.
+  const DASHBOARD_TYPES={tasks:'Tugas',directives:'Disposisi',meetings:'Rapat',dims:'Raperda/DIM',reviews:'Telaahan'};
+  const DASHBOARD_START='[RINGKASAN DASHBOARD SIPETAK - SARAN LOKAL]';
+  const DASHBOARD_END='[/RINGKASAN DASHBOARD SIPETAK]';
+  function dashboardData(vault,year,categories,now=new Date()){
+    if(!vault||!Array.isArray(categories)||!categories.length||categories.length>5||new Set(categories).size!==categories.length||categories.some(c=>!DASHBOARD_TYPES[c]))throw Error('Pilih sedikitnya satu kategori dashboard yang tersedia.');
+    const start=new Date(now.getFullYear(),now.getMonth(),now.getDate(),12,0,0);
+    const rows=[];
+    const count={total:0,pending:0,done:0,overdue:0,soon:0,unknown:0};
+    for(const kind of categories){
+      for(const r of (Array.isArray(vault[kind])?vault[kind]:[])){
+        if(!r||!r.id||Number(r.performanceYear)!==Number(year)||isRestricted(r)||/\b(?:rahasia|terbatas|confidential|secret)\b/i.test(clean(r.classification)))continue;
+        // Metadata saja: tidak mengakses notes, facts, material, proposal atau file.
+        const state=kind==='meetings'
+          ?[r.prepStatus,r.minutesStatus].filter(x=>clean(x)).length===2&&doneStatus(r.prepStatus)&&doneStatus(r.minutesStatus)
+          :doneStatus(r.status);
+        const day=kind==='meetings'
+          ?[!doneStatus(r.prepStatus)&&r.prepDueAt,!doneStatus(r.minutesStatus)&&r.minutesDueAt].filter(Boolean).map(localDay).filter(Boolean).sort()[0]||''
+          :priorityDate(kind,r);
+        const when=localDate(day);
+        const days=when?Math.round((when-start)/86400000):null;
+        const overdue=!state&&days!==null&&days<0;
+        const soon=!state&&days!==null&&days>=0&&days<=7;
+        const important=/^(tinggi|mendesak|urgent|kritis|kritik)$/i.test(clean(r.priority));
+        const score=state?0:overdue?6:soon&&days<=3?5:soon?4:important?3:days!==null?2:1;
+        const flag=state?'Ditandai selesai':overdue?'Lewat tenggat':soon?'Tenggat 7 hari':important?'Prioritas tinggi':days===null?'Belum ada tenggat':'Dalam pemantauan';
+        count.total++;if(state)count.done++;else count.pending++;
+        if(overdue)count.overdue++;if(soon)count.soon++;if(!state&&days===null)count.unknown++;
+        rows.push({key:kind+':'+String(r.id),kind,title:clean(r.title||r.perda||'Catatan tanpa judul').slice(0,100),day,
+          status:kind==='meetings'?`Persiapan: ${clean(r.prepStatus)||'belum dicatat'}; risalah: ${clean(r.minutesStatus)||'belum dicatat'}`:(clean(r.status)||'Tidak dicatat'),score,flag,step:suggestedStep(kind)});
+      }
+    }
+    rows.sort((a,b)=>b.score-a.score||((a.day||'9999').localeCompare(b.day||'9999'))||a.key.localeCompare(b.key));
+    return {year:Number(year),categories:[...categories],date:localDay(now),count,rows:rows.slice(0,12)};
+  }
+  function validDashboard(){
+    if(!dashSnapshot||dashSnapshot.year!==Number(myActiveYear())||dashSnapshot.categories.join('|')!==dashCategories.join('|'))return null;
+    try{
+      const check=dashboardData(data,myActiveYear(),dashCategories,new Date());
+      if(JSON.stringify(check)!==JSON.stringify(dashSnapshot)){dashSnapshot=null;return null}
+      return dashSnapshot;
+    }catch{dashSnapshot=null;return null}
+  }
+  function dashboardText(result){
+    const c=result.count;
+    return [DASHBOARD_START,`Data ringkasan lokal tahun ${result.year}; kategori: ${result.categories.map(x=>DASHBOARD_TYPES[x]).join(', ')}.`,
+      `Total catatan: ${c.total}; belum ditandai selesai: ${c.pending}; ditandai selesai: ${c.done}; melewati tenggat: ${c.overdue}; tenggat 7 hari: ${c.soon}; tanpa tenggat: ${c.unknown}.`,
+      'Saran (bukan keputusan/penugasan): periksa pekerjaan melewati tenggat, konfirmasi status pekerjaan aktif, dan pastikan tenggat serta bukti dukung sesuai sumber.',
+      'Ini ringkasan metadata untuk perencanaan, bukan hasil audit atau nilai SKP.',DASHBOARD_END].join('\n');
+  }
+  function dashboardHtml(){
+    const report=validDashboard();
+    if(!report)return '<p class="hint">Belum ada ringkasan aktif. Pilih kategori lalu tekan Tampilkan dashboard. Data tidak diproses untuk dashboard sebelum kamu meminta.</p>';
+    const c=report.count;
+    const metrics=[['Catatan',c.total],['Belum selesai',c.pending],['Lewat tenggat',c.overdue],['7 hari ke depan',c.soon],['Selesai (label)',c.done]];
+    const metricHtml=metrics.map(([label,num])=>`<div class="ai-dashboard-metric"><strong>${num}</strong><span>${escape(label)}</span></div>`).join('');
+    return `<p class="hint">Ringkasan lokal tahun ${report.year} • ${escape(report.categories.map(x=>DASHBOARD_TYPES[x]).join(', '))}. Hanya metadata catatan nonrahasia yang dipilih berdasarkan kategori; tanpa pengiriman jaringan.</p>`+
+      `<div class="ai-dashboard-metrics">${metricHtml}</div>`+
+      `<h4>Prioritas yang perlu ditinjau (maksimal 12)</h4>`+
+      (report.rows.length?report.rows.map(r=>`<div class="ai-dashboard-item"><div class="ai-plan-line"><b>${escape(r.title)}</b><span class="ai-plan-flag">${escape(r.flag)}</span></div><p class="hint">${escape(DASHBOARD_TYPES[r.kind])} • ${escape(r.status)} • Tenggat: ${escape(r.day||'belum dicatat')}</p><p>${escape(r.step)}</p><button type="button" class="btn ghost sm" data-action="ai-dashboard-open" data-key="${escape(r.key)}">Buka modul ${escape(DASHBOARD_TYPES[r.kind])}</button></div>`).join(''):'<p class="hint">Tidak ada catatan nonrahasia dalam pilihan kategori dan tahun ini.</p>')+
+      `<div class="actions"><button class="btn secondary sm" type="button" data-action="ai-dashboard-use">Tambahkan ringkasan tanpa judul catatan ke pratinjau AI</button></div><p class="hint">Tombol hanya menyiapkan teks, tidak mengirimnya. Periksa pratinjau dan beri persetujuan baru sebelum meminta AI.</p>`;
+  }
+  function dashboardPanel(){
+    return `<section class="card ai-dashboard" aria-label="JARVIS Dashboard Cerdas"><div class="ai-dashboard-header"><div><h3>✦ JARVIS Dashboard Cerdas · Tahap 7</h3><p class="hint">Pilih kategori untuk ringkasan tahun kerja aktif. Penghitungan dilakukan <b>hanya di perangkat</b> setelah kamu menekan tombol; tidak membuka isi dokumen, lampiran, atau data berklasifikasi rahasia.</p></div><span class="ai-dashboard-local">Lokal</span></div>`+
+      `<fieldset class="ai-dashboard-scope"><legend>Pilih kategori sumber (metadata saja)</legend>`+
+      Object.entries(DASHBOARD_TYPES).map(([key,label])=>`<label><input type="checkbox" data-ai-dashboard-type="${key}" ${dashCategories.includes(key)?'checked':''}> ${escape(label)}</label>`).join('')+
+      `</fieldset><div class="actions"><button type="button" class="btn secondary sm" data-action="ai-dashboard-run">Tampilkan dashboard</button><button type="button" class="btn ghost sm" data-action="ai-dashboard-clear">Kosongkan ringkasan</button></div><div id="aiDashboardResult" role="status" aria-live="polite">${dashboardHtml()}</div></section>`;
+  }
+  function updateDashboard(){const el=document.getElementById('aiDashboardResult');if(el)el.innerHTML=dashboardHtml();}
+  function runDashboard(){
+    try{dashSnapshot=dashboardData(data,myActiveYear(),dashCategories,new Date());updateDashboard();status('Dashboard lokal dibuat. Tidak ada data yang dikirim ke AI atau disimpan.');}
+    catch(err){dashSnapshot=null;updateDashboard();status(err.message,true)}
+  }
+  function useDashboard(){
+    const result=validDashboard();if(!result){updateDashboard();status('Ringkasan berubah atau sudah tidak berlaku. Tampilkan ulang dashboard.',true);return}
+    const input=document.getElementById('aiPreview');if(!input){status('Kolom pratinjau tidak tersedia.',true);return}
+    // Hapus hanya blok ringkasan lama. Teks lain yang telah diedit pengguna dipertahankan.
+    let base=String(input.value||'');const start=base.indexOf(DASHBOARD_START);
+    if(start!==-1){const end=base.indexOf(DASHBOARD_END,start);
+      if(end===-1){status('Ringkasan lama telah diedit sebagian. Hapus penanda ringkasan lama secara manual dahulu.',true);return}
+      base=(base.slice(0,start)+base.slice(end+DASHBOARD_END.length)).trim();
+    }
+    if(base.startsWith('Belum ada materi untuk dikirim:'))base='';
+    const merged=[base,dashboardText(result)].filter(Boolean).join('\n\n');
+    if(merged.length>maxPreview){status('Pratinjau terlalu panjang. Kurangi materi sebelum menambahkan ringkasan.',true);return}
+    input.value=merged;previewEdited=true;invalidateDraft();
+    const hint=document.getElementById('aiPreviewHint');if(hint)hint.textContent='Ringkasan dashboard ditambahkan tanpa nama atau isi catatan. Periksa, sunting, lalu setujui kembali jika ingin mengirim ke AI.';
+    status('Ringkasan lokal ditambahkan ke pratinjau (BELUM DIKIRIM).');
+  }
+  function dashboardOpen(key){
+    const report=validDashboard();if(!report||!report.rows.some(x=>x.key===key)){updateDashboard();throw Error('Pilihan dashboard berubah. Buat ringkasan baru.');}
+    const kind=key.split(':')[0],route={tasks:'tugas',directives:'sekretaris',meetings:'persidangan',dims:'raperda',reviews:'telaah'}[kind];
+    if(!route)throw Error('Modul tidak dikenali.');
+    navigate(route); // Hanya membuka modul, tidak memperbarui catatan.
+  }
   // Perlindungan tambahan di browser dan tetap diverifikasi ulang di Worker.
   const restrictedText=x=>/(?:^|\n)\s*(?:classification|klasifikasi)\s*:\s*(?:terbatas|rahasia|sangat rahasia|confidential|secret)\b/i.test(x);
   // Jangan pernah kirim token Supabase ke hostname Worker sembarang.
@@ -222,6 +318,7 @@
   function page(){const opts=Object.entries(MODES).map(([id,m])=>`<option value="${id}" ${mode===id?'selected':''}>${escape(m.label)}</option>`).join(''),url=savedUrl(),preview=getPreview();
     return `<div class="section-head"><div><h3>✦ Asisten AI SIPETAK</h3><p>Pilih hingga 3 catatan, sunting materi yang boleh dikirim, lalu buat draf hanya setelah persetujuan.</p></div><button class="btn ghost" data-action="navigate" data-view="panduan">Panduan →</button></div>
     <div class="callout warn"><b>Perhatian data kedinasan:</b> layanan AI eksternal menerima teks yang disetujui. Jangan mengirim data rahasia, pribadi, dokumen belum diizinkan instansi, atau berkas berklasifikasi Terbatas. Lampiran tidak dikirim otomatis. AI dapat keliru dan tidak mengesahkan keputusan, hukum, risalah, atau SKP.</div>
+    ${dashboardPanel()}
     <div class="ai-grid"><section class="card ai-work"><h3>1 · Pilih bantuan AI</h3><div class="field"><label for="aiMode">Jenis bantuan</label><select id="aiMode">${opts}</select></div><p class="hint">${escape(MODES[mode].hint)}</p>
     <div class="field"><label for="aiSource">Pilih catatan kerja (tahun ${myActiveYear()}, maksimal 3)</label><select id="aiSource" ${selectedKeys.length>=3?'disabled':''}>${options()}</select><div class="ai-picked-list" id="aiSelectedSources">${selectedSummary()}</div><p class="hint" id="aiSourceCounter">${selectedKeys.length} dari 3 catatan dipilih. Sumber tidak pernah dipilih otomatis.</p></div>
     <div class="field"><label for="aiNotes">Konteks tambahan (maks. 1.800 karakter)</label><textarea id="aiNotes" rows="5" maxlength="1800" placeholder="Tujuan draf atau pertanyaan yang ingin dijawab. Jangan masukkan data rahasia/pribadi.">${escape(notes)}</textarea></div>
@@ -344,6 +441,12 @@
   function invalidateDraft(){currentOutput='';const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';const c=document.getElementById('aiConsent');if(c)c.checked=false;}
   function previewUpdate(){invalidateLocalPlan();previewEdited=false;const el=document.getElementById('aiPreview');if(el)el.value=getPreview();invalidateDraft();}
   function change(e){
+    if(e.target?.dataset?.aiDashboardType){
+      const kind=e.target.dataset.aiDashboardType;
+      if(!DASHBOARD_TYPES[kind])return true;
+      dashCategories=e.target.checked?[...new Set([...dashCategories,kind])]:dashCategories.filter(x=>x!==kind);
+      dashSnapshot=null;updateDashboard();return true;
+    }
     if(e.target?.id==='aiMode'){localPlan=null;mode=e.target.value;selected='';selectedKeys=[];notes='';previewEdited=false;currentOutput='';currentSource='';render();return true}
     if(e.target?.id==='aiSource'){
       const key=e.target.value;
@@ -408,8 +511,12 @@
     finally{clearTimeout(timer);abort=null;busy=false;if(vaultKey&&view==='ai'){const b=document.querySelector('[data-action="ai-send"]');if(b){b.disabled=false;b.textContent='✦ Buat konsep dengan AI'}}}
   }
   async function saveDraft(){if(!currentOutput||!vaultKey||!data)throw Error('Belum ada hasil AI.');if(myYearArchived())throw Error('Tahun kinerja sudah diarsipkan.');data.aiDrafts||=[];const d={id:uid('AI'),createdAt:isoNow(),performanceYear:myActiveYear(),mode,sourceKey:currentSource,content:currentOutput,classification:'Draf AI - belum diverifikasi'};data.aiDrafts.push(d);if(data.aiDrafts.length>30)data.aiDrafts.splice(0,data.aiDrafts.length-30);await queueSave();render();toast('Konsep AI tersimpan terenkripsi sebagai draf, bukan dokumen resmi.')}
-  function clear(){abort?.abort();abort=null;busy=false;localPlan=null;currentOutput='';currentSource='';notes='';selected='';selectedKeys=[];previewEdited=false;}
+  function clear(){abort?.abort();abort=null;busy=false;localPlan=null;dashSnapshot=null;dashCategories=['tasks','directives','meetings'];currentOutput='';currentSource='';notes='';selected='';selectedKeys=[];previewEdited=false;}
   function action(el){const a=el?.dataset?.action;if(!a?.startsWith('ai-'))return false;
+    if(a==='ai-dashboard-run'){runDashboard();return true}
+    if(a==='ai-dashboard-clear'){dashSnapshot=null;updateDashboard();status('Ringkasan dashboard dibersihkan dari tampilan.');return true}
+    if(a==='ai-dashboard-use'){useDashboard();return true}
+    if(a==='ai-dashboard-open'){try{dashboardOpen(el.dataset.key)}catch(err){status(err.message,true)}return true}
     if(a==='ai-local-analyze'){analyzeLocally();return true}
     if(a==='ai-use-plan'){useLocalPlan();return true}
     if(a==='ai-save-plan'){saveLocalPlan().catch(err=>status(err.message,true));return true}
@@ -426,6 +533,6 @@
     if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=copyText(currentOutput);const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
     return false;
   }
-  root.SIPETAK_AI={MODES,list,sourceText,compose,localAnalysis,localPlanText,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
-  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,localAnalysis,localPlanText,endpoint,healthText,checkConnection,renderDocument,displaySource,copyText};
+  root.SIPETAK_AI={MODES,list,sourceText,compose,localAnalysis,localPlanText,dashboardData,dashboardText,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
+  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,localAnalysis,localPlanText,dashboardData,dashboardText,endpoint,healthText,checkConnection,renderDocument,displaySource,copyText};
 })(typeof window!=='undefined'?window:globalThis);
