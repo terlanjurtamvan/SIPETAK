@@ -63,12 +63,50 @@
     if(full.length>maxPreview)throw Error('Materi melebihi 7.700 karakter. Ringkas catatan terlebih dahulu.');
     return {mode:which,sourceText:full,consent:true};
   }
+  // Jangan pernah kirim token Supabase ke hostname Worker sembarang.
+  // Host di bawah berasal dari dokumentasi Worker SIPETAK yang diunggah.
+  // Jika deployment dipindahkan, daftar ini harus ditinjau di source code.
+  const TRUSTED_AI_HOSTS=new Set(['sipetak-asisten-ai.terlanjurtamvan18.workers.dev','sipetak.pages.dev']);
   function endpoint(raw){
     const s=clean(raw);if(!s)throw Error('Alamat Worker AI belum diisi.');
-    const u=new URL(s);const h=u.hostname.toLowerCase();
-    if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash||u.port||u.pathname!=='/'||!(h.endsWith('.workers.dev')||h==='sipetak.pages.dev'))throw Error('Masukkan alamat HTTPS Worker *.workers.dev (tanpa path/parameter).');
-    if(!h.endsWith('.workers.dev')&&h!=='sipetak.pages.dev')throw Error('Alamat Worker tidak diizinkan.');
+    let u;try{u=new URL(s)}catch{throw Error('Alamat Worker AI harus berupa URL HTTPS yang lengkap.')}
+    const h=u.hostname.toLowerCase();
+    if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash||u.port||u.pathname!=='/'||!TRUSTED_AI_HOSTS.has(h)){
+      throw Error('Alamat Worker AI tidak diizinkan. Gunakan alamat SIPETAK yang tercantum dalam panduan proyek.');
+    }
     return u.origin;
+  }
+  function healthText(info){
+    if(!info||info.service!=='sipetak-asisten-ai'||typeof info.configured!=='boolean'||!info.checks||typeof info.checks!=='object'){
+      return {ok:false,text:'Respons /health tidak dikenali sebagai layanan SIPETAK AI.'};
+    }
+    const labels={aiBinding:'AI binding',rateLimit:'pembatasan pemakaian',supabasePublicConfig:'konfigurasi publik Supabase',allowedOrigin:'alamat website yang diizinkan'};
+    const missing=Object.entries(labels).filter(([key])=>info.checks[key]!==true).map(([,label])=>label);
+    if(info.configured===true&&missing.length===0){
+      return {ok:true,text:'Koneksi Worker siap'+(typeof info.version==='string'?' (versi '+info.version.slice(0,30)+')':'')+'. Ini belum menguji login pengguna atau jawaban model AI.'};
+    }
+    return {ok:false,text:'Worker terhubung, tetapi perlu konfigurasi: '+(missing.join(', ')||'periksa status konfigurasi Worker')+'. Periksa Cloudflare Workers Settings.'};
+  }
+  async function checkConnection(){
+    const el=document.getElementById('aiHealthStatus');
+    const btn=document.querySelector('[data-action="ai-test-connection"]');
+    if(!el)return;
+    let url;
+    try{url=endpoint(document.getElementById('aiWorkerUrl')?.value||savedUrl())}
+    catch(err){el.textContent=err.message;el.classList.add('ai-error');return}
+    if(btn){btn.disabled=true;btn.textContent='Memeriksa…'}
+    el.classList.remove('ai-error');el.textContent='Memeriksa konfigurasi Worker tanpa mengirim token atau catatan…';
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),10000);
+    try{
+      const response=await fetch(url+'/health',{method:'GET',mode:'cors',cache:'no-store',credentials:'omit',redirect:'error',signal:controller.signal});
+      if(!response.ok)throw Error('HTTP '+response.status);
+      const result=healthText(await response.json());
+      el.textContent=result.text;el.classList.toggle('ai-error',!result.ok);
+    }catch(err){
+      el.textContent=err?.name==='AbortError'?'Pemeriksaan melewati 10 detik. Coba lagi.':'Status Worker belum bisa dibaca ('+(err?.message||'koneksi gagal')+'). Periksa alamat, deployment, dan CORS /health.';
+      el.classList.add('ai-error');
+    }finally{clearTimeout(timer);if(btn){btn.disabled=false;btn.textContent='Uji koneksi AI'}}
   }
   function savedUrl(){return clean(data?.aiSettings?.workerUrl||document.querySelector('meta[name="sipetak-ai-worker-url"]')?.content||'');}
   function options(){return `<option value="">— Ketik konteks sendiri / tanpa sumber —</option>`+list(data,myActiveYear()).map(x=>`<option value="${escape(x.key)}" ${x.key===selected?'selected':''}>${escape(x.label)}</option>`).join('')}
@@ -84,7 +122,7 @@
     <label class="ai-consent"><input type="checkbox" id="aiConsent"> <span>Saya sudah memeriksa teks di atas dan memastikan informasi ini <b>boleh diproses oleh penyedia AI</b> sesuai aturan instansi. Saya paham hasilnya hanya draf.</span></label>
     <div class="actions"><button type="button" class="btn" data-action="ai-send" ${busy?'disabled':''}>${busy?'Memproses…':'✦ Buat konsep dengan AI'}</button><button type="button" class="btn ghost" data-action="ai-reset">Kosongkan materi</button></div>
     <div id="aiStatus" role="status" aria-live="polite" class="hint">${busy?'Menghubungi layanan AI…':'AI hanya berjalan ketika Anda menekan tombol dan menyetujui materinya.'}</div></section>
-    <div class="ai-side"><section class="card"><h3>Pengaturan koneksi</h3><p class="hint">Gunakan alamat Worker Cloudflare tersendiri. Tidak perlu API key AI pada iPhone.</p><div class="field"><label for="aiWorkerUrl">Alamat Worker AI</label><input id="aiWorkerUrl" type="url" value="${escape(url)}" placeholder="https://sipetak-asisten-ai.nama.workers.dev" autocomplete="off"></div><button class="btn secondary sm" data-action="ai-save-url">Simpan alamat di brankas</button><p class="hint">${url?'Alamat sudah tersimpan/tersedia.':'Belum dihubungkan. AI tidak bisa menghasilkan teks sampai Worker dipasang.'} Login Supabase aktif diperlukan untuk AI.</p></section>
+    <div class="ai-side"><section class="card"><h3>Pengaturan koneksi</h3><p class="hint">Gunakan alamat Worker Cloudflare tersendiri. Tidak perlu API key AI pada iPhone.</p><div class="field"><label for="aiWorkerUrl">Alamat Worker AI</label><input id="aiWorkerUrl" type="url" value="${escape(url)}" placeholder="https://sipetak-asisten-ai.terlanjurtamvan18.workers.dev" autocomplete="off"></div><div class="actions"><button class="btn secondary sm" data-action="ai-save-url">Simpan alamat di brankas</button><button type="button" class="btn ghost sm" data-action="ai-test-connection">Uji koneksi AI</button></div><p id="aiHealthStatus" class="hint" role="status" aria-live="polite">Pemeriksaan koneksi tidak mengirim token login maupun materi pekerjaan.</p><p class="hint">${url?'Alamat sudah tersimpan/tersedia.':'Belum dihubungkan. AI tidak bisa menghasilkan teks sampai Worker dipasang.'} Login Supabase aktif diperlukan untuk membuat draf AI.</p></section>
     <section class="card"><h3>3 · Hasil konsep AI</h3><div id="aiResult">${currentOutput?resultHtml():'<p class="hint">Setelah diproses, hasil AI muncul di sini. Anda dapat menyalin atau menyimpan sebagai draf terenkripsi.</p>'}</div></section></div></div>
     <section class="card"><h3>Draf AI tersimpan dalam brankas tahun ${myActiveYear()}</h3><p class="hint">Draf bukan dokumen resmi, bukan bukti sah, dan tidak mengubah SKP atau status pekerjaan. Maksimal 30 draf terakhir tersimpan.</p><div class="ai-drafts">${drafts().length?drafts().map(x=>`<div class="ai-draft"><div><b>${escape(MODES[x.mode]?.label||'Draf AI')}</b><small>${escape(new Date(x.createdAt).toLocaleString('id-ID'))} · Draf untuk diverifikasi</small></div><div class="actions"><button class="btn sm ghost" data-action="ai-open-draft" data-id="${escape(x.id)}">Lihat</button><button class="btn sm danger" data-action="ai-delete-draft" data-id="${escape(x.id)}" ${myYearArchived()?'disabled':''}>Hapus</button></div></div>`).join(''):'<p class="hint">Belum ada draf AI yang disimpan.</p>'}</div></section>`;
   }
@@ -197,7 +235,7 @@
 
   function previewUpdate(){const el=document.getElementById('aiPreview');if(el)el.textContent=getPreview();const c=document.getElementById('aiConsent');if(c)c.checked=false;}
   function change(e){if(e.target?.id==='aiMode'){mode=e.target.value;selected='';notes='';currentOutput='';currentSource='';render();return true}if(e.target?.id==='aiSource'){selected=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}return false}
-  function input(e){if(e.target?.id==='aiNotes'){notes=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}return false}
+  function input(e){if(e.target?.id==='aiNotes'){notes=e.target.value;currentOutput='';previewUpdate();const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';return true}if(e.target?.id==='aiWorkerUrl'){const el=document.getElementById('aiHealthStatus');if(el){el.textContent='Alamat berubah. Tekan Uji koneksi AI untuk memeriksa alamat baru.';el.classList.remove('ai-error')}return true}return false}
   function status(text,bad=false){const el=document.getElementById('aiStatus');if(el){el.textContent=text;el.classList.toggle('ai-error',bad)}else if(bad)toast(text,true)}
   async function send(){if(busy)return;let payload,url;
     try{if(!document.getElementById('aiConsent')?.checked)throw Error('Centang persetujuan setelah membaca materi yang akan dikirim.');payload=compose(data,myActiveYear());url=endpoint(savedUrl());if(!window.SIPETAK_SB_AI_TOKEN)throw Error('Penghubung Supabase belum tersedia.');}
@@ -238,6 +276,7 @@
   async function saveDraft(){if(!currentOutput||!vaultKey||!data)throw Error('Belum ada hasil AI.');if(myYearArchived())throw Error('Tahun kinerja sudah diarsipkan.');data.aiDrafts||=[];const d={id:uid('AI'),createdAt:isoNow(),performanceYear:myActiveYear(),mode,sourceKey:currentSource,content:currentOutput,classification:'Draf AI - belum diverifikasi'};data.aiDrafts.push(d);if(data.aiDrafts.length>30)data.aiDrafts.splice(0,data.aiDrafts.length-30);await queueSave();render();toast('Konsep AI tersimpan terenkripsi sebagai draf, bukan dokumen resmi.')}
   function clear(){abort?.abort();abort=null;busy=false;currentOutput='';currentSource='';notes='';selected='';}
   function action(el){const a=el?.dataset?.action;if(!a?.startsWith('ai-'))return false;
+    if(a==='ai-test-connection'){checkConnection();return true}
     if(a==='ai-save-url'){try{if(myYearArchived())throw Error('Tahun sedang diarsipkan.');const url=endpoint(document.getElementById('aiWorkerUrl')?.value||'');data.aiSettings={...(data.aiSettings||{}),workerUrl:url};queueSave().then(()=>{render();toast('Alamat Worker AI tersimpan dalam brankas.')}).catch(fail)}catch(err){status(err.message,true)}return true}
     if(a==='ai-reset'){notes='';selected='';currentOutput='';render();return true}
     if(a==='ai-send'){send();return true}
@@ -248,6 +287,6 @@
     if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=copyText(currentOutput);const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
     return false;
   }
-  root.SIPETAK_AI={MODES,list,sourceText,compose,endpoint,page,action,change,input,clear,renderDocument,displaySource,copyText};
-  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,endpoint,renderDocument,displaySource,copyText};
+  root.SIPETAK_AI={MODES,list,sourceText,compose,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
+  if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,endpoint,healthText,checkConnection,renderDocument,displaySource,copyText};
 })(typeof window!=='undefined'?window:globalThis);
