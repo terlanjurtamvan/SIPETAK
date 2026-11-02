@@ -100,6 +100,29 @@ if (typeof window !== 'undefined' && (!window.SIPETAK_PDF_TEXT || window.SIPETAK
 
 }
 
+
+/* Impor indeks halaman yang dibuat dari PDF pengguna. Tidak ada unggahan jaringan. */
+function wfParseRagIndex(raw,byteLength){
+ if(!Number.isSafeInteger(byteLength)||byteLength<20||byteLength>2*1024*1024)throw Error('Indeks RAG JSON maksimal 2 MB.');
+ let doc;try{doc=JSON.parse(raw)}catch{throw Error('Indeks RAG JSON tidak valid.');}
+ if(!doc||doc.format!=='sipetak-rag-page-index-v1'||!Array.isArray(doc.pages))throw Error('Format indeks tidak dikenal. Gunakan file .rag.json dari proses konversi yang tepercaya.');
+ if(!Number.isInteger(doc.totalPages)||doc.totalPages<1||doc.totalPages>250)throw Error('Jumlah halaman indeks tidak valid (maks. 250).');
+ if(doc.pages.length<1||doc.pages.length>doc.totalPages)throw Error('Jumlah halaman berisi teks tidak valid.');
+ if(typeof doc.title!=='string'||doc.title.trim().length<8||doc.title.length>240)throw Error('Judul sumber pada indeks tidak valid.');
+ if(typeof doc.sourceSha256!=='string'||!/^[0-9a-f]{64}$/i.test(doc.sourceSha256))throw Error('Sidik jari PDF pada indeks tidak valid.');
+ if(typeof doc.sourceFilename!=='string'||doc.sourceFilename.length>255||!/\.pdf$/i.test(doc.sourceFilename))throw Error('Nama file PDF sumber tidak valid.');
+ let sum=0,last=0;const pages=[];
+ for(const item of doc.pages){
+  if(!Number.isInteger(item?.page)||item.page<=last||item.page>doc.totalPages)throw Error('Nomor halaman indeks harus valid dan berurutan.');
+  if(typeof item.text!=='string'||!item.text.trim()||item.text.length>35000)throw Error('Teks halaman indeks tidak valid atau terlalu besar.');
+  if(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(item.text))throw Error('Indeks memuat karakter kontrol yang tidak valid.');
+  sum+=item.text.length;if(sum>350000)throw Error('Indeks melebihi batas 350.000 karakter.');
+  pages.push({page:item.page,text:item.text});last=item.page;
+ }
+ if(doc.totalCharacters!==sum||doc.indexedPages!==pages.length)throw Error('Jumlah karakter atau halaman indeks tidak sesuai; file mungkin berubah.');
+ return {pages,title:doc.title,filename:doc.sourceFilename,sha256:doc.sourceSha256,method:String(doc.extractionMethod||'').slice(0,100),totalPages:doc.totalPages,chars:sum};
+}
+
 /* SIPETAK workflow: local-first encrypted data, editable INTERNAL SLA, Web Notifications,
    optional HTTPS self-hosted encrypted sync and Web Push. No official approvals. */
 const WF_SLA_DEFAULTS={
@@ -243,6 +266,7 @@ function wfLawModal(id){
  <div class="field span2"><label><input type="checkbox" name="ragOriginVerified" value="yes" ${x.ragOriginVerified==='yes'?'checked':''}> Saya sudah memeriksa asal dokumen dan mengizinkan teksnya digunakan untuk RAG. Tidak memuat data Rahasia/Terbatas/pribadi.</label><p class="hint">Centang tidak membuktikan keabsahan otomatis; hanya pernyataan pemeriksaan oleh pengguna.</p></div>
  ${field('Kutipan / teks sumber yang ditinjau (maks. 16.000 karakter)','ragText','textarea',x.ragText||'','Hasil impor PDF atau kutipan yang diperiksa.',false,true)}
  <div class="field span2"><label for="ragImportTxt">Impor TXT pendek (opsional, lokal)</label><input id="ragImportTxt" type="file" accept=".txt,text/plain"></div>
+ <div class="field span2"><label for="ragImportIndex">Impor indeks RAG siap baca (.rag.json; untuk PDF scan atau dokumen besar)</label><input id="ragImportIndex" type="file" accept=".json,.rag.json,application/json"><p class="hint" id="ragIndexImportStatus" role="status" aria-live="polite">Pilih indeks hasil konversi PDF tepercaya. Teks diimpor di perangkat, belum disimpan sampai kamu menekan Simpan perubahan. Jangan unggah indeks ke GitHub publik.</p></div>
  <div class="field span2"><label for="ragPdfKeyword">Kata kunci / pasal untuk pratinjau (opsional)</label><input id="ragPdfKeyword" type="text" maxlength="80" placeholder="Contoh: Pasal 125"></div>
  <div class="field span2"><label for="ragImportPdf">Impor dan indeks seluruh halaman PDF (maks. 10 MB)</label><input id="ragImportPdf" type="file" accept=".pdf,application/pdf"><p class="hint" id="ragPdfImportStatus" role="status" aria-live="polite">PDF berbasis teks diproses di perangkat. Maksimal 250 halaman / 350.000 karakter. Halaman yang tidak terbaca tidak diindeks, PDF scan memerlukan OCR. PDF asli tidak disimpan atau dikirim.</p><p class="hint" id="ragIndexSummary">${Array.isArray(x.ragPages)&&x.ragPages.length?'Indeks tersimpan: '+x.ragPages.length+' halaman teks. Impor ulang PDF untuk memperbarui.':'Belum ada indeks dokumen lengkap.'}</p></div>
  <div class="field span2"><label>Impor isi PDF dari link Google Drive (opsional)</label><button class="btn secondary" type="button" id="ragImportDriveButton">Ambil PDF dari link Drive dan buat indeks</button><p class="hint" id="ragDriveStatus" role="status" aria-live="polite">Membaca hanya file PDF yang dapat diunduh oleh layanan. Untuk file Drive privat, download PDF dari akunmu lalu pilih file pada kolom impor di atas. Dokumen kedinasan jangan diubah menjadi publik tanpa izin.</p></div>
@@ -256,6 +280,24 @@ function wfLawModal(id){
   const text=await f.text();if(!text.trim()||text.length>16000)throw Error('TXT kosong atau lebih dari 16.000 karakter.');
   form.elements.ragText.value=text;toast('TXT menjadi draf kutipan; belum disimpan.');
  }catch(err){fail(err)}});
+ form.querySelector('#ragImportIndex')?.addEventListener('change',async e=>{
+  const status=$('ragIndexImportStatus');
+  try{
+   const file=e.target.files?.[0];if(!file)return;
+   status.textContent='Memeriksa indeks halaman...';
+   const parsed=wfParseRagIndex(await file.text(),file.size);
+   const oldTitle=String(form.elements.title.value||'').toLocaleLowerCase('id-ID');
+   const newTitle=parsed.title.toLocaleLowerCase('id-ID');
+   const referenceType=s=>/tata\s+tertib/i.test(s)?'tatib':/renstra/i.test(s)?'renstra':'lain';
+   if(referenceType(oldTitle)!=='lain'&&referenceType(newTitle)!==referenceType(oldTitle))throw Error('Indeks tidak sesuai dengan referensi yang sedang diedit. Buka kartu dokumen yang cocok.');
+   form._ragPendingPages=parsed.pages;
+   const excerpt=window.SIPETAK_PDF_TEXT?.selectExcerpt?window.SIPETAK_PDF_TEXT.selectExcerpt(parsed.pages.map(x=>x.text).join('\n\n'),$('ragPdfKeyword')?.value||'').excerpt:parsed.pages.map(x=>x.text).join('\n\n').slice(0,16000);
+   form.elements.ragText.value=excerpt;
+   status.textContent='Siap disimpan: '+parsed.pages.length+' dari '+parsed.totalPages+' halaman, '+parsed.chars+' karakter. Sumber: '+parsed.filename+'. Ekstraksi: '+parsed.method+'. '+(/OCR/i.test(parsed.method)?'Hasil OCR perlu diperiksa terhadap halaman PDF asli. ':'')+'Tekan Simpan perubahan untuk menyimpan indeks terenkripsi.';
+   $('ragIndexSummary').textContent='Indeks BARU belum disimpan: '+parsed.pages.length+' halaman. Setelah simpan, cek label RAG: Dapat dicari.';
+   $('ragPdfImportStatus').textContent='Indeks halaman dari '+parsed.filename+' siap, tidak perlu memilih PDF ulang.';
+  }catch(err){status.textContent='Impor indeks gagal: '+String(err.message||err)+'. Indeks sebelumnya tidak dihapus.';}
+ });
  async function ragReadFile(file,source){
   const status=$('ragPdfImportStatus');
   if(!file)return;
@@ -303,9 +345,14 @@ function wfLawModal(id){
   if(r.ragClassification==='Publik'&&r.ragOriginVerified!=='yes')throw Error('Untuk memakai RAG, centang pernyataan bahwa asal dan izin penggunaan dokumen sudah diperiksa.');
   const old=data.laws.find(t=>t.id===id),row={...old,...r,id:old?.id||uid('LAW'),createdAt:old?.createdAt||isoNow(),updatedAt:isoNow()};
   if(Array.isArray(form._ragPendingPages)&&form._ragPendingPages.length){row.ragPages=form._ragPendingPages;row.ragIndexedAt=isoNow();}
-  // If source permissions change, the index stays encrypted but retrieval will reject it unless authorized.
-  if(old)Object.assign(old,row);else data.laws.push(row);
-  wfAudit('pustaka',old?'Diperbarui':'Dibuat',row);await queueSave();closeModal();render();toast(window.SIPETAK_LEGAL_RAG?.eligible(row)?'Dokumen tersimpan dan SIAP DICARI RAG.':'Referensi tersimpan, tetapi RAG belum siap. Lihat alasan di kartu dokumen.');
+  // Jika penyimpanan terenkripsi gagal (misalnya kuota), batalkan mutasi di memori.
+  const beforeLaws=structuredClone(data.laws),beforeAudit=structuredClone(data.audit);
+  try{
+   if(old)Object.assign(old,row);else data.laws.push(row);
+   wfAudit('pustaka',old?'Diperbarui':'Dibuat',row);
+   await queueSave();
+  }catch(saveError){data.laws=beforeLaws;data.audit=beforeAudit;throw Error('Gagal menyimpan indeks ke brankas. Data sebelumnya dipertahankan. '+String(saveError?.message||saveError));}
+  closeModal();render();toast(window.SIPETAK_LEGAL_RAG?.eligible(row)?'Dokumen tersimpan dan SIAP DICARI RAG.':'Referensi tersimpan, tetapi RAG belum siap. Lihat alasan di kartu dokumen.');
  }catch(err){fail(err)}});
 }
 async function wfLawDelete(id){const i=data.laws.findIndex(x=>x.id===id);if(i<0||!confirm('Hapus referensi ini?'))return;wfAudit('pustaka','Dihapus',data.laws[i]);data.laws.splice(i,1);await queueSave();render();}
