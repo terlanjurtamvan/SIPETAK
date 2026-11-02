@@ -319,6 +319,7 @@
     return `<div class="section-head"><div><h3>✦ Asisten AI SIPETAK</h3><p>Pilih hingga 3 catatan, sunting materi yang boleh dikirim, lalu buat draf hanya setelah persetujuan.</p></div><button class="btn ghost" data-action="navigate" data-view="panduan">Panduan →</button></div>
     <div class="callout warn"><b>Perhatian data kedinasan:</b> layanan AI eksternal menerima teks yang disetujui. Jangan mengirim data rahasia, pribadi, dokumen belum diizinkan instansi, atau berkas berklasifikasi Terbatas. Lampiran tidak dikirim otomatis. AI dapat keliru dan tidak mengesahkan keputusan, hukum, risalah, atau SKP.</div>
     ${dashboardPanel()}
+    ${root.SIPETAK_LEGAL_RAG?.panel(data?.laws||[],'ai')||''}
     <div class="ai-grid"><section class="card ai-work"><h3>1 · Pilih bantuan AI</h3><div class="field"><label for="aiMode">Jenis bantuan</label><select id="aiMode">${opts}</select></div><p class="hint">${escape(MODES[mode].hint)}</p>
     <div class="field"><label for="aiSource">Pilih catatan kerja (tahun ${myActiveYear()}, maksimal 3)</label><select id="aiSource" ${selectedKeys.length>=3?'disabled':''}>${options()}</select><div class="ai-picked-list" id="aiSelectedSources">${selectedSummary()}</div><p class="hint" id="aiSourceCounter">${selectedKeys.length} dari 3 catatan dipilih. Sumber tidak pernah dipilih otomatis.</p></div>
     <div class="field"><label for="aiNotes">Konteks tambahan (maks. 1.800 karakter)</label><textarea id="aiNotes" rows="5" maxlength="1800" placeholder="Tujuan draf atau pertanyaan yang ingin dijawab. Jangan masukkan data rahasia/pribadi.">${escape(notes)}</textarea></div>
@@ -438,6 +439,22 @@
   }
   function resultHtml(){return `<div class="ai-result-note"><span class="ai-draft-mark">DRAF AI · WAJIB VERIFIKASI</span><small>Konsep awal, bukan dokumen resmi</small></div><article class="ai-document" aria-label="Pratinjau dokumen hasil AI">${renderDocument(currentOutput)}</article><details class="ai-raw-details"><summary>Lihat teks asli dari AI (Markdown)</summary><pre class="ai-original">${escape(currentOutput)}</pre></details><div class="actions ai-result-actions"><button class="btn sm secondary" data-action="ai-copy">Salin teks rapi</button><button class="btn sm secondary" data-action="ai-save-draft" ${myYearArchived()?'disabled':''}>Simpan draf terenkripsi</button>${mode==='telaahan'&&!myYearArchived()?'<button class="btn sm ghost" data-action="ai-to-review">Buka di formulir Telaahan</button>':''}</div>`}
 
+  function addLegalContext(hit){
+    if(!vaultKey||!data)throw Error('Buka brankas terlebih dahulu.');
+    if(view!=='ai')navigate('ai');
+    const target=document.getElementById('aiPreview');if(!target)throw Error('Pratinjau AI tidak ditemukan.');
+    // Citations are numbered in the current, user-editable preview; no vault IDs.
+    const prior=String(target.value||'');const nums=[...prior.matchAll(/\[S(\d{1,2})\]/g)].map(x=>Number(x[1]));
+    const next=nums.length?Math.max(...nums)+1:1;
+    if(next>6)throw Error('Maksimal enam potongan sumber. Kurangi referensi dalam pratinjau.');
+    const block=root.SIPETAK_LEGAL_RAG.context(hit,next);
+    const base=prior.startsWith('Belum ada materi untuk dikirim:')?'':prior;
+    const content=(base.trim()?base.trim()+'\n\n':'')+'RUJUKAN PUSTAKA HUKUM TERPILIH — gunakan hanya sebagai kutipan; sertakan [S1], [S2] sesuai sumber dan jangan mengarang dasar hukum.\n'+block;
+    if(content.length>maxPreview)throw Error('Materi melewati 7.700 karakter. Hapus teks tidak penting sebelum menambah kutipan.');
+    target.value=content;previewEdited=true;invalidateDraft();
+    const hint=document.getElementById('aiPreviewHint');if(hint)hint.textContent='Kutipan sumber resmi ditambahkan. Periksa isi/kerahasiaan, relevansi, dan URL sumber; persetujuan wajib diberikan ulang.';
+    target.scrollIntoView?.({behavior:'smooth',block:'center'});status('Kutipan siap ditinjau, belum dikirim ke Worker.');
+  }
   function invalidateDraft(){currentOutput='';const out=document.getElementById('aiResult');if(out)out.innerHTML='<p class="hint">Materi berubah. Buat konsep baru.</p>';const c=document.getElementById('aiConsent');if(c)c.checked=false;}
   function previewUpdate(){invalidateLocalPlan();previewEdited=false;const el=document.getElementById('aiPreview');if(el)el.value=getPreview();invalidateDraft();}
   function change(e){
@@ -533,6 +550,6 @@
     if(a==='ai-to-review'){if(!currentOutput||mode!=='telaahan'||myYearArchived())return true;const draft=copyText(currentOutput);const source=currentSource;navigate('telaah');entityModal('review','');const form=document.getElementById('entityForm');if(!form)return true;form.elements.title.value='Konsep telaahan AI — wajib diperiksa';form.elements.issue.value='Disusun dari materi pilihan pengguna. Verifikasi kronologi, sumber, dan dasar hukum.';form.elements.analysis.value=draft;form.elements.status.value='Draf';if(source.startsWith('tasks:')){const id=source.slice(6);if([...form.elements.taskId.options].some(x=>x.value===id))form.elements.taskId.value=id}const more=form.querySelector('.form-more');if(more)more.open=true;toast('Konsep dipindahkan ke formulir, belum disimpan. Periksa dahulu.');return true}
     return false;
   }
-  root.SIPETAK_AI={MODES,list,sourceText,compose,localAnalysis,localPlanText,dashboardData,dashboardText,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
+  root.SIPETAK_AI={addLegalContext,MODES,list,sourceText,compose,localAnalysis,localPlanText,dashboardData,dashboardText,endpoint,healthText,checkConnection,page,action,change,input,clear,renderDocument,displaySource,copyText};
   if(typeof module!=='undefined'&&module.exports)module.exports={MODES,list,sourceText,compose,localAnalysis,localPlanText,dashboardData,dashboardText,endpoint,healthText,checkConnection,renderDocument,displaySource,copyText};
 })(typeof window!=='undefined'?window:globalThis);
