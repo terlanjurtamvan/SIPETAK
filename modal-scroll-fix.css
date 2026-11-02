@@ -1,0 +1,21 @@
+/* SIPETAK - perbaikan gulir formulir dialog (Pustaka Hukum & modal panjang)
+   Hanya memperbaiki layout, tanpa memodifikasi penyimpanan atau validasi. */
+.modal-box { min-height: 0; }
+.modal-box > .modal-form {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.modal-box > .modal-form > .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.modal-box > .modal-form > .modal-foot {
+  flex: 0 0 auto;
+}
