@@ -10,6 +10,7 @@
   function isOfficialUrl(url){
     try{const u=new URL(clean(url));return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.hash&&(u.hostname==='go.id'||u.hostname.endsWith('.go.id'));}catch{return false;}
   }
+  function isArchiveUrl(url){try{const u=new URL(clean(url));return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&(u.hostname==='drive.google.com'||u.hostname==='docs.google.com')&&!u.hash;}catch{return false;}}
   function eligible(record){return Boolean(record&&record.status==='Telah diverifikasi internal'&&record.ragClassification==='Publik'&&!/^(?:sangat\s+rahasia|rahasia|terbatas|secret|confidential)\b/i.test(clean(record.classification))&&isOfficialUrl(record.ragSourceUrl)&&clean(record.ragText).length>=60&&!/\b(?:rancangan akhir|belum final)\b/i.test(record.title||''));}
   function chunks(text){
     const paras=clean(text).replace(/\r\n?/g,'\n').split(/\n\s*\n|(?=\n(?:Pasal\s+\d+|BAB\s+[IVX]+)\b)/i).map(x=>x.trim()).filter(Boolean);
@@ -72,7 +73,7 @@
     }
     return true;
   }
-  const api={isOfficialUrl,eligible,chunks,search,context,panel,action};
+  const api={isOfficialUrl,isArchiveUrl,eligible,chunks,search,context,panel,action};
   root.SIPETAK_LEGAL_RAG=api;
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
