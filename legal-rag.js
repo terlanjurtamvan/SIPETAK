@@ -19,6 +19,18 @@
   if(!Array.isArray(doc?.ragPages))return [];
   return doc.ragPages.slice(0,250).filter(p=>Number.isInteger(p?.page)&&p.page>0&&p.page<=250&&typeof p.text==='string'&&p.text.trim().length>0&&p.text.length<=350000);
  }
+ function readiness(doc){
+  if(!doc)return 'Referensi tidak ada.';
+  if(!verified(doc))return 'Status perlu diverifikasi. Pilih Telah diverifikasi internal setelah memeriksa sumber, atau Rancangan / belum final.';
+  if(doc.ragClassification!=='Publik')return 'Izin RAG belum Publik. Dokumen internal/rahasia tidak dapat diindeks untuk AI tanpa izin instansi.';
+  if(/^(?:sangat\s+rahasia|rahasia|terbatas|secret|confidential)\b/i.test(clean(doc.classification)))return 'Klasifikasi dokumen membatasi penggunaan RAG.';
+  if(doc.ragOriginVerified!=='yes'&&!(doc.status==='Telah diverifikasi internal'&&isOfficialUrl(doc.ragSourceUrl)))return 'Centang pernyataan pemeriksaan asal dan izin penggunaan dokumen.';
+  if(doc.ragOriginKind==='JDIH / situs instansi'&&!isOfficialUrl(doc.ragSourceUrl))return 'Untuk asal JDIH, alamat *.go.id diperlukan; untuk PDF arsip kantor pilih Arsip resmi instansi.';
+  if(doc.ragOriginKind==='Lainnya')return 'Pilih asal dokumen yang dapat diperiksa.';
+  const count=pages(doc).length;
+  if(count===0&&clean(doc.ragText).length<60)return 'Teks belum diindeks. Pilih PDF atau ambil dari Drive, tunggu pesan Siap disimpan, lalu Simpan perubahan.';
+  return 'Siap dicari melalui RAG.';
+ }
  function eligible(doc){
   if(!verified(doc)||doc.ragClassification!=='Publik')return false;
   if(/^(?:sangat\s+rahasia|rahasia|terbatas|secret|confidential)\b/i.test(clean(doc.classification)))return false;
@@ -83,7 +95,7 @@
   }
   return true;
  }
- const api={isOfficialUrl,isArchiveUrl,eligible,docStage,pages,chunks,search,context,panel,action,stillPresent};
+ const api={isOfficialUrl,isArchiveUrl,eligible,readiness,docStage,pages,chunks,search,context,panel,action,stillPresent};
  root.SIPETAK_LEGAL_RAG=api;
  if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

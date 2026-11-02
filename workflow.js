@@ -220,7 +220,7 @@ function pustakaPage(){
  const rows=data.laws||[];
  return `<div class="section-head"><div><h3>Referensi hukum & dokumen rujukan</h3><p>Arsip dokumen, status verifikasi dan indeks PDF per halaman untuk RAG lokal.</p></div><button class="btn" data-action="wf-law-new">＋ Tambah Referensi</button></div>
  <div class="callout warn">Dokumen resmi instansi dapat digunakan tanpa tautan JDIH setelah asalnya diperiksa manual. <b>Rancangan Akhir Renstra</b> tetap ditandai sebagai rancangan, bukan peraturan/dokumen final. SIPETAK tidak memverifikasi keberlakuan hukum otomatis.</div>
- ${window.SIPETAK_LEGAL_RAG?.panel(rows,'pustaka')||''}<div class="wf-cards">${rows.length?rows.map(x=>`<article class="card"><div class="tiny muted">${txt(x.type||'Referensi')} · ${txt(x.status||'Perlu verifikasi')}</div><h3>${txt(x.title)}</h3><p class="hint"><b>Nomor/Tahun:</b> ${txt(x.number||'—')} / ${txt(x.year||'—')}<br><b>Pasal:</b> ${txt(x.article||'—')}<br><b>Asal:</b> ${txt(x.origin||'—')}<br><b>Tahap dokumen:</b> ${txt(window.SIPETAK_LEGAL_RAG?.docStage(x)||'Belum dipastikan')}<br><b>Diperiksa:</b> ${fmtDate(x.verifiedAt)}<br><b>RAG:</b> ${window.SIPETAK_LEGAL_RAG?.eligible(x)?'Dapat dicari':'Belum memenuhi syarat'}<br><b>Indeks PDF:</b> ${Array.isArray(x.ragPages)&&x.ragPages.length?x.ragPages.length+' halaman berisi teks':'Belum tersedia'}${x.ragSourceUrl?`<br><b>JDIH:</b> ${txt(x.ragSourceUrl)}`:''}${x.ragArchiveUrl?`<br><b>Arsip pendukung:</b> ${txt(x.ragArchiveUrl)}`:''}</p><p>${txt(x.notes||'').slice(0,230)}</p><div class="actions"><button class="btn sm secondary" data-action="wf-law-edit" data-id="${txt(x.id)}">Ubah</button><button class="btn sm danger" data-action="wf-law-delete" data-id="${txt(x.id)}">Hapus</button></div></article>`).join(''):blank('Belum ada pustaka pribadi. Tambahkan referensi hukum.','▧')}</div>`;
+ ${window.SIPETAK_LEGAL_RAG?.panel(rows,'pustaka')||''}<div class="wf-cards">${rows.length?rows.map(x=>`<article class="card"><div class="tiny muted">${txt(x.type||'Referensi')} · ${txt(x.status||'Perlu verifikasi')}</div><h3>${txt(x.title)}</h3><p class="hint"><b>Nomor/Tahun:</b> ${txt(x.number||'—')} / ${txt(x.year||'—')}<br><b>Pasal:</b> ${txt(x.article||'—')}<br><b>Asal:</b> ${txt(x.origin||'—')}<br><b>Tahap dokumen:</b> ${txt(window.SIPETAK_LEGAL_RAG?.docStage(x)||'Belum dipastikan')}<br><b>Diperiksa:</b> ${fmtDate(x.verifiedAt)}<br><b>RAG:</b> ${window.SIPETAK_LEGAL_RAG?.eligible(x)?'Dapat dicari':'Belum memenuhi syarat'}<br><b>Keterangan:</b> ${txt(window.SIPETAK_LEGAL_RAG?.readiness(x)||'Beri izin dan indeks terlebih dahulu')}<br><b>Indeks PDF:</b> ${Array.isArray(x.ragPages)&&x.ragPages.length?x.ragPages.length+' halaman berisi teks':'Belum tersedia'}${x.ragSourceUrl?`<br><b>JDIH:</b> ${txt(x.ragSourceUrl)}`:''}${x.ragArchiveUrl?`<br><b>Arsip pendukung:</b> ${txt(x.ragArchiveUrl)}`:''}</p><p>${txt(x.notes||'').slice(0,230)}</p><div class="actions"><button class="btn sm secondary" data-action="wf-law-edit" data-id="${txt(x.id)}">Ubah</button><button class="btn sm danger" data-action="wf-law-delete" data-id="${txt(x.id)}">Hapus</button></div></article>`).join(''):blank('Belum ada pustaka pribadi. Tambahkan referensi hukum.','▧')}</div>`;
 }
 function wfLawModal(id){
  const x=data.laws.find(t=>t.id===id)||{};
@@ -245,6 +245,7 @@ function wfLawModal(id){
  <div class="field span2"><label for="ragImportTxt">Impor TXT pendek (opsional, lokal)</label><input id="ragImportTxt" type="file" accept=".txt,text/plain"></div>
  <div class="field span2"><label for="ragPdfKeyword">Kata kunci / pasal untuk pratinjau (opsional)</label><input id="ragPdfKeyword" type="text" maxlength="80" placeholder="Contoh: Pasal 125"></div>
  <div class="field span2"><label for="ragImportPdf">Impor dan indeks seluruh halaman PDF (maks. 10 MB)</label><input id="ragImportPdf" type="file" accept=".pdf,application/pdf"><p class="hint" id="ragPdfImportStatus" role="status" aria-live="polite">PDF berbasis teks diproses di perangkat. Maksimal 250 halaman / 350.000 karakter. Halaman yang tidak terbaca tidak diindeks, PDF scan memerlukan OCR. PDF asli tidak disimpan atau dikirim.</p><p class="hint" id="ragIndexSummary">${Array.isArray(x.ragPages)&&x.ragPages.length?'Indeks tersimpan: '+x.ragPages.length+' halaman teks. Impor ulang PDF untuk memperbarui.':'Belum ada indeks dokumen lengkap.'}</p></div>
+ <div class="field span2"><label>Impor isi PDF dari link Google Drive (opsional)</label><button class="btn secondary" type="button" id="ragImportDriveButton">Ambil PDF dari link Drive dan buat indeks</button><p class="hint" id="ragDriveStatus" role="status" aria-live="polite">Membaca hanya file PDF yang dapat diunduh oleh layanan. Untuk file Drive privat, download PDF dari akunmu lalu pilih file pada kolom impor di atas. Dokumen kedinasan jangan diubah menjadi publik tanpa izin.</p></div>
  <div class="callout warn">RAG hanya mencari sumber <b>Publik</b> yang asalnya sudah dikonfirmasi. JDIH bersifat opsional untuk arsip resmi instansi. Dokumen <b>Rancangan</b> ditandai jelas dan tidak boleh disebut sudah berlaku. Indeks teks disimpan <b>terenkripsi bersama brankas</b> setelah tombol Simpan ditekan; jangan masukkan materi yang tidak diizinkan.</div>
  </div>`;
  openModal('Referensi Hukum','Indeks PDF lokal dan keterangan status sumber. Tidak memverifikasi keberlakuan otomatis.',body,null,'wfLawForm');
@@ -255,22 +256,38 @@ function wfLawModal(id){
   const text=await f.text();if(!text.trim()||text.length>16000)throw Error('TXT kosong atau lebih dari 16.000 karakter.');
   form.elements.ragText.value=text;toast('TXT menjadi draf kutipan; belum disimpan.');
  }catch(err){fail(err)}});
+ async function ragReadFile(file,source){
+  const status=$('ragPdfImportStatus');
+  if(!file)return;
+  status.textContent='Membaca '+source+' di perangkat...';
+  if(!window.SIPETAK_PDF_TEXT?.extract)throw Error('Pembaca PDF belum siap. Muat ulang halaman setelah deployment.');
+  const out=await window.SIPETAK_PDF_TEXT.extract(file);
+  if(!Array.isArray(out.pageTexts)||!out.pageTexts.length)throw Error('PDF tidak memiliki teks yang bisa diindeks. PDF scan membutuhkan OCR.');
+  const full=out.pageTexts.filter(p=>p.text.trim()).map(p=>({page:p.page,text:p.text}));
+  if(!full.length)throw Error('Tidak ada halaman PDF yang dapat dicari.');
+  form._ragPendingPages=full;
+  const chosen=window.SIPETAK_PDF_TEXT.selectExcerpt(out.text,$('ragPdfKeyword')?.value||'');
+  form.elements.ragText.value=chosen.excerpt;
+  status.textContent='Siap disimpan: '+full.length+' dari '+out.pages+' halaman PDF, '+out.chars+' karakter berhasil dibaca dari '+source+'. ' +(out.emptyPages?'Sebanyak '+out.emptyPages+' halaman tidak terbaca. ':'')+'Klik Simpan perubahan untuk mengenkripsi indeks.';
+  $('ragIndexSummary').textContent='Indeks BARU belum disimpan: '+full.length+' halaman. Klik Simpan perubahan.';
+ }
+ form.querySelector('#ragImportDriveButton')?.addEventListener('click',async e=>{
+  const status=$('ragDriveStatus'),button=e.currentTarget;
+  const link=String(form.elements.ragArchiveUrl?.value||form.elements.ragSourceUrl?.value||'').trim();
+  if(!link){status.textContent='Tempel URL file PDF Drive pada kolom tautan arsip pendukung terlebih dahulu.';return;}
+  if(!window.SIPETAK_DRIVE_RAG?.getPdf){status.textContent='Modul impor Drive belum tersedia. Muat ulang SIPETAK sesudah deployment.';return;}
+  button.disabled=true;status.textContent='Mengunduh PDF Drive menggunakan koneksi SIPETAK (file tidak disimpan di server)...';
+  try{
+   const pdf=await window.SIPETAK_DRIVE_RAG.getPdf(link);
+   await ragReadFile(pdf,'tautan Drive');
+   status.textContent='PDF Drive berhasil dibaca. Periksa kutipan dan klik Simpan perubahan.';
+  }catch(err){status.textContent='Drive gagal: '+String(err.message||err)+' Indeks sebelumnya tidak dihapus.';}
+  finally{button.disabled=false;}
+ });
  form.querySelector('#ragImportPdf')?.addEventListener('change',async e=>{
-  const status=$('ragPdfImportStatus');try{
-   const file=e.target.files?.[0];if(!file)return;
-   status.textContent='Memeriksa isi PDF di perangkat...';
-   if(!window.SIPETAK_PDF_TEXT?.extract)throw Error('Pembaca PDF tidak tersedia. Muat ulang SIPETAK setelah deployment.');
-   const out=await window.SIPETAK_PDF_TEXT.extract(file);
-   if(!Array.isArray(out.pageTexts)||!out.pageTexts.length)throw Error('Nomor halaman PDF tidak berhasil dibaca.');
-   const full=out.pageTexts.filter(p=>p.text.trim()).map(p=>({page:p.page,text:p.text}));
-   if(!full.length)throw Error('Tidak ada halaman PDF yang dapat dibaca.');
-   // Keep only in-memory pending index until explicit save. No network calls.
-   form._ragPendingPages=full;
-   const chosen=window.SIPETAK_PDF_TEXT.selectExcerpt(out.text,$('ragPdfKeyword')?.value||'');
-   form.elements.ragText.value=chosen.excerpt;
-   const message='Siap disimpan: '+full.length+'/'+out.pages+' halaman PDF berisi teks ('+out.chars+' karakter). '+(out.emptyPages?'Peringatan: '+out.emptyPages+' halaman tidak terbaca dan tidak dapat dicari. ':'')+'Periksa isi dan status dokumen sebelum Simpan. PDF asli tidak diunggah.';
-   status.textContent=message;$('ragIndexSummary').textContent='Indeks baru belum disimpan: '+full.length+' halaman. Simpan perubahan untuk mengenkripsi indeks.';
-  }catch(err){status.textContent='Impor gagal: '+(err.message||err)+'. Indeks sebelumnya tidak berubah.';form._ragPendingPages=null;fail(err);}
+  const status=$('ragPdfImportStatus');
+  try{const file=e.target.files?.[0];if(!file)return;await ragReadFile(file,'unggahan PDF');}
+  catch(err){status.textContent='Impor PDF gagal: '+String(err.message||err)+' Indeks sebelumnya tetap ada.';}
  });
  form.addEventListener('submit',async e=>{e.preventDefault();try{
   const r=formValue(form);r.ragOriginVerified=form.elements.ragOriginVerified.checked?'yes':'';
@@ -288,7 +305,7 @@ function wfLawModal(id){
   if(Array.isArray(form._ragPendingPages)&&form._ragPendingPages.length){row.ragPages=form._ragPendingPages;row.ragIndexedAt=isoNow();}
   // If source permissions change, the index stays encrypted but retrieval will reject it unless authorized.
   if(old)Object.assign(old,row);else data.laws.push(row);
-  wfAudit('pustaka',old?'Diperbarui':'Dibuat',row);await queueSave();closeModal();render();toast('Referensi tersimpan dalam brankas. RAG menggunakan hanya sumber yang diizinkan.');
+  wfAudit('pustaka',old?'Diperbarui':'Dibuat',row);await queueSave();closeModal();render();toast(window.SIPETAK_LEGAL_RAG?.eligible(row)?'Dokumen tersimpan dan SIAP DICARI RAG.':'Referensi tersimpan, tetapi RAG belum siap. Lihat alasan di kartu dokumen.');
  }catch(err){fail(err)}});
 }
 async function wfLawDelete(id){const i=data.laws.findIndex(x=>x.id===id);if(i<0||!confirm('Hapus referensi ini?'))return;wfAudit('pustaka','Dihapus',data.laws[i]);data.laws.splice(i,1);await queueSave();render();}
