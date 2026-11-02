@@ -19,3 +19,13 @@
 .modal-box > .modal-form > .modal-foot {
   flex: 0 0 auto;
 }
+
+/* Tampilkan pesan kesalahan DI ATAS dialog agar tidak menutupi tombol Simpan. */
+body:has(.modal-overlay) .toast {
+  top: max(12px, env(safe-area-inset-top));
+  bottom: auto;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: min(480px, calc(100vw - 24px));
+}
