@@ -2,7 +2,7 @@
   "id": "./",
   "name": "SIPETAK Pribadi — Ruang Kerja Penelaah Teknis Kebijakan dan Asisten Sekwan",
   "short_name": "SIPETAK",
-  "description": "Ruang kerja pribadi ASN: telaahan, persidangan, agenda Sekwan, RHK, SLA, dan brankas terenkripsi Supabase opsional.",
+  "description": "Ruang kerja pribadi ASN: telaahan, persidangan, agenda Sekwan, RHK, SLA, transkripsi suara dan brankas terenkripsi Supabase opsional.",
   "lang": "id-ID",
   "start_url": "./index.html",
   "scope": "./",

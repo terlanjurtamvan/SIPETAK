@@ -1,6 +1,6 @@
 {
-  "version": "3.3.0-rc1",
-  "generated_date": "2026-10-28",
+  "version": "3.9.0-rc1",
+  "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
     "logic",
@@ -15,12 +15,15 @@
     "Safari iPhone PWA",
     "real Web Push",
     "security audit",
-    "field usability test with real Sekretariat DPRD workflows"
+    "field usability test with real Sekretariat DPRD workflows",
+    "actual OpenAI transcription API call",
+    "Cloudflare D1 quota binding production",
+    "microphone permission and MediaRecorder on real iPhone"
   ],
   "cloud_data_format": "sipetak-vault-v1 (AES-256-GCM encrypted JSON envelope)",
   "note": "Supabase URL and publishable key centralized in index.html; cloud onboarding for new device",
   "product": "SIPETAK Pribadi",
-  "build_date": "2026-10-28",
+  "build_date": "2026-11-07",
   "features": [
     "tahunkinerja",
     "arsip-readonly",
@@ -33,7 +36,12 @@
     "one-field-completion",
     "auto-lifecycle",
     "auto-evidence-link",
-    "safe-shell-only-sw-cache"
+    "safe-shell-only-sw-cache",
+    "transkripsi-suara-file-upload",
+    "rekam-mikrofon",
+    "dikte-browser-opsional",
+    "transkrip-vault",
+    "draf-notulensi-tugas-bukti"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
@@ -41,5 +49,7 @@
     2,
     3
   ],
-  "deployment_status": "staging-not-production-verified"
+  "deployment_status": "staging-not-production-verified",
+  "transcription_backend": "Cloudflare Pages Function /api/transcribe; requires OPENAI_API_KEY + D1 TRANSCRIBE_DB + TRANSCRIBE_ENABLED=true",
+  "notes": "Existing vault schema 3 and encryption format unchanged; transcription text is optional in data.transcriptions; audio not persisted; data migration not required."
 }
