@@ -71,3 +71,18 @@
 .transcript-prompt.needs-attention{outline:2px solid #bf7b25;outline-offset:3px}
 .transcript-speaker-panel .btn:disabled,.transcript-speaker-custom input:disabled{opacity:.5;cursor:not-allowed}
 .transcript-primary-actions .btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* v3.12.5: inline step-by-step guide without adding workflow blockers */
+.transcript-usage-guide{margin:14px 0 18px;border:1px solid var(--border,rgba(120,120,120,.3));border-radius:14px;background:var(--surface-alt,rgba(95,126,155,.045));overflow:hidden}
+.transcript-usage-guide>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:15px 17px;font-weight:750;line-height:1.5;min-height:52px}
+.transcript-usage-guide>summary::-webkit-details-marker{display:none}
+.transcript-usage-guide>summary::after{content:'+';margin-left:auto;font-size:1.3rem;color:var(--app-primary,var(--accent,#6252d7))}
+.transcript-usage-guide[open]>summary::after{content:'−'}
+.transcript-guide-count{font-size:.8rem;font-weight:600;white-space:nowrap;color:var(--app-muted,var(--muted,#667788))}
+.transcript-guide-body{padding:0 17px 17px;line-height:1.6;font-size:.93rem}
+.transcript-guide-body ol{padding-left:22px;margin:12px 0;display:grid;gap:11px}
+.transcript-guide-body li::marker{color:var(--app-primary,var(--accent,#6252d7));font-weight:800}
+.transcript-print-tip{padding:11px 13px;background:var(--app-surface,var(--surface,#fff));border:1px solid var(--app-border,var(--border,#cdd4dd));border-radius:9px;line-height:1.6;margin:13px 0}
+.transcript-print-shorthelp{border-left:3px solid var(--app-primary,var(--accent,#6252d7));padding-left:10px;line-height:1.55}
+@media(max-width:650px){.transcript-usage-guide>summary{flex-wrap:wrap;padding:13px}.transcript-guide-body{padding:0 13px 14px}.transcript-guide-count{margin-left:auto}}
+@media print{.transcript-usage-guide{display:none}}

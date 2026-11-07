@@ -130,6 +130,25 @@
   const meetingChoices=myItems('meetings').map(m=>`<option value="${esc(m.id)}" ${draft.meetingId===m.id?'selected':''}>${esc(m.title||'Agenda tanpa nama')}</option>`).join('');
   return `<div class="section-head"><div><h3>🎙️ Rekam + Tulis Langsung</h3><p>Satu tombol untuk merekam WAV dan menuliskan ucapan saat berbicara — tanpa API SIPETAK.</p></div></div>
   <div class="callout warn"><b>Privasi:</b> Pengenalan suara bawaan browser dapat mengirim audio ke layanan penyedia browser. Gunakan hanya untuk materi yang diizinkan instansi. Materi <b>Terbatas</b> tidak bisa memakai mode ini.</div>
+  <details class="transcript-usage-guide" id="transcriptUsageGuide">
+   <summary>📘 Cara menggunakan: dari rekam hingga cetak Notulen & Risalah <span class="transcript-guide-count">8 langkah</span></summary>
+   <div class="transcript-guide-body">
+    <p class="hint">Gunakan Chrome untuk mode rekam + tulis yang sudah berhasil diuji oleh pengguna. Buka brankas dan pilih tahun kinerja yang tepat. Panduan ini tidak merekam atau mengirim data apa pun.</p>
+    <ol>
+     <li><b>Isi agenda rapat.</b> Masukkan nama kegiatan pada kolom Nama kegiatan / agenda dan pilih klasifikasi informasi yang diperbolehkan.</li>
+     <li><b>Pastikan izin.</b> Centang persetujuan setelah memperoleh izin perekaman dan pengenalan suara sesuai aturan instansi.</li>
+     <li><b>Mulai rekam + tulis.</b> Tekan “Mulai Rekam + Tulis Langsung”, izinkan mikrofon, lalu ucapkan kalimat uji. Pastikan indikator Audio dan Teks berjalan serta kata-kata muncul saat berbicara.</li>
+     <li><b>Tandai pembicara bila perlu.</b> Selagi merekam, tekan Ketua Rapat / Anggota / Narasumber atau Tandai waktu. Semua penanda dibuat manual dan harus dicocokkan dengan audio.</li>
+     <li><b>Hentikan dan amankan audio.</b> Tekan Hentikan, putar rekaman WAV, lalu tekan “Unduh rekaman WAV ke perangkat”. Pastikan berkas tersimpan sebelum menutup halaman.</li>
+     <li><b>Periksa dan simpan teks.</b> Koreksi nama, angka, istilah, dan kutipan. Centang “Saya sudah membaca dan mengoreksi teks”, lalu tekan “Simpan teks terenkripsi”.</li>
+     <li><b>Siapkan dua dokumen.</b> Buka “Identitas rapat &amp; hasil terverifikasi”, isi tanggal, jenis rapat, pimpinan, daftar hadir, keputusan dan tindak lanjut yang sudah dipastikan. Tekan “Buat Notulen” / “Buat Risalah” untuk meninjau, atau “Word Notulen” / “Word Risalah” bila perlu mengedit di Word/Pages.</li>
+     <li><b>Cetak atau simpan PDF.</b> Tekan “Cetak / PDF Notulen” atau “Cetak / PDF Risalah”. Pada dialog browser pilih printer untuk kertas atau “Simpan sebagai PDF / Save as PDF”. Periksa pratinjau, ukuran A4 dan isi dokumen sebelum mencetak.</li>
+    </ol>
+    <div class="transcript-print-tip"><b>Jika dialog cetak tidak muncul:</b> izinkan pop-up/tab baru untuk situs SIPETAK. Di tab dokumen cetak, gunakan Ctrl+P (Windows) atau ⌘P (Mac). Untuk iPhone, gunakan menu Bagikan → Cetak / Simpan ke File bila tersedia. Sebagai alternatif, unduh Word lalu cetak dari Word/Pages.</div>
+    <p class="hint"><b>Penting:</b> file WAV, Word dan PDF yang diunduh berada di luar brankas terenkripsi. Semua Notulen/Risalah tetap KONSEP sampai diperiksa dan disahkan menurut tata kerja instansi.</p>
+    <button class="btn secondary" type="button" data-action="navigate" data-view="panduan">Lihat panduan lengkap SIPETAK →</button>
+   </div>
+  </details>
   <div class="transcript-pane">
    <section class="card transcript-card">
     <div class="field"><label for="transcriptTitle">Nama kegiatan / agenda</label><input id="transcriptTitle" maxlength="160" placeholder="Contoh: Rapat pembahasan Raperda" value="${esc(draft.title)}" ${readonly?'disabled':''}></div>
@@ -158,6 +177,7 @@
     ${formalForm(readonly)}
     <div class="transcript-grid-actions"><button class="btn" data-action="transcript-formal-preview" data-kind="notulen">📄 Buat Notulen</button><button class="btn" data-action="transcript-formal-preview" data-kind="risalah">📑 Buat Risalah</button><button class="btn secondary" data-action="transcript-formal-word" data-kind="notulen">↓ Word Notulen</button><button class="btn secondary" data-action="transcript-formal-word" data-kind="risalah">↓ Word Risalah</button></div>
     <div class="transcript-grid-actions"><button class="btn ghost" data-action="transcript-formal-print" data-kind="notulen">🖨 Cetak / PDF Notulen</button><button class="btn ghost" data-action="transcript-formal-print" data-kind="risalah">🖨 Cetak / PDF Risalah</button></div>
+    <p class="hint transcript-print-shorthelp">Panduan cetak: pilih salah satu tombol di atas → izinkan tab baru bila diminta → pada dialog pilih <b>Printer</b> atau <b>Save as PDF / Simpan sebagai PDF</b> → cek A4 dan pratinjau. Dokumen masih <b>KONSEP</b>.</p>
     <h4>Hasil dari satu teks</h4><p class="hint">Satu kali transkrip disimpan, semua jenis draf dapat dihasilkan tanpa mengetik ulang.</p><div class="transcript-grid-actions"><button class="btn" data-action="transcript-bundle">✦ Buat semua draf sekaligus</button><button class="btn secondary" data-action="transcript-export-bundle">↓ Unduh paket draf TXT</button></div><div class="transcript-results">${[['minutes','Draf notulensi'],['summary','Petikan bahan ringkasan'],['followup','Calon tindak lanjut'],['evidence','Metadata bukti dukung']].map(([id,label])=>`<button class="btn secondary" data-action="transcript-output" data-kind="${id}">${label}</button>`).join('')}</div>
     <div id="transcriptOutput" class="transcript-output" aria-live="polite"></div>
    </section>
