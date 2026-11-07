@@ -1,3 +1,7 @@
+## Update v3.12.4-rc1 — Kejelasan alur rekaman (7 November 2026)
+
+Perbaikan berdasarkan tangkapan layar: kotak izin harus dicentang secara sadar sebelum merekam, tombol Hentikan dan penanda pembicara tidak aktif saat idle, panduan langkah tampil dekat tombol mulai, dan tag PWA standar untuk peringatan Console Chrome. Mesin WAV + transkripsi browser dan keamanan data tidak diubah.
+
 # SIPETAK Pribadi — v3.12.3-rc1 (integrasi referensi Meta AI)
 
 **Status: kandidat uji/staging; belum diterapkan ke GitHub atau Cloudflare produksi dan belum diuji pada Safari iPhone pengguna.**

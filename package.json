@@ -1,6 +1,6 @@
 {
   "name": "sipetak-pribadi",
-  "version": "3.12.3-rc1",
+  "version": "3.12.4-rc1",
   "private": true,
   "type": "module",
   "description": "SIPETAK offline-first; Cloudflare Pages; encrypted vault; transcription drafts",

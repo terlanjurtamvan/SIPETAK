@@ -1,5 +1,5 @@
 {
-  "version": "3.12.3-rc1",
+  "version": "3.12.4-rc1",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -26,7 +26,7 @@
     "simultaneous Web Speech Recognition and getUserMedia on real iPhone and stable Safari"
   ],
   "cloud_data_format": "sipetak-vault-v1 (AES-256-GCM encrypted JSON envelope)",
-  "note": "Supabase URL and publishable key centralized in index.html; cloud onboarding for new device",
+  "note": "Supabase URL and publishable key centralized in index.html; cloud onboarding for new device; v3.12.4: clearer consent, disabled idle markers, recorder status controls, Chromium PWA meta",
   "product": "SIPETAK Pribadi",
   "build_date": "2026-11-07",
   "features": [
@@ -61,7 +61,8 @@
     "microphone-muted-event-warning",
     "independent-audio-and-text-status",
     "prominent-audio-download",
-    "notulen-dan-risalah-dprd-konsep-word-cetak-pdf"
+    "notulen-dan-risalah-dprd-konsep-word-cetak-pdf",
+    "recording-idle-state-and-consent-onboarding"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
