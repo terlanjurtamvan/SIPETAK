@@ -81,3 +81,20 @@ test('one tap starts WAV recording and live text in the same draft without auto 
  assert.equal(data.transcriptions.length,0,'Still needs verification and explicit save');
  ctx.SIPETAK_TRANSCRIPT.secureLock();
 });
+
+test('offline backend readiness never pretends that recording audio is live transcription',async()=>{
+ const {ctx,controls,getSaves}=build();ctx.navigator.onLine=true;controls.transcriptConsent.checked=true;
+ let stopped=false,liveCalls=0;
+ ctx.SIPETAK_SB_AI_TOKEN=async()=> 'b'.repeat(40);
+ ctx.SIPETAK_RECORDER={start:async()=>({mode:'wav',stream:{getAudioTracks:()=>[{kind:'audio'}]},stop:async()=>{stopped=true;return new ctx.File([new Uint8Array(512)],'rekaman.wav',{type:'audio/wav'});},abort:()=>{}})};
+ ctx.SIPETAK_LIVE_ENGINE={create:()=>{liveCalls++;return {connect:async()=>{},abort:()=>{},stop:async()=>{}};}};
+ ctx.SIPETAK_TRANSCRIBE_SERVICE={check:async()=>({live:{ready:false,reason:'not-enabled'},upload:{ready:false,reason:'not-enabled'}}),statusMessage:()=> 'TRANSCRIBE_LIVE_ENABLED belum diaktifkan'};
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-live'}});
+ await new Promise(r=>setTimeout(r,25));
+ assert.equal(liveCalls,0,'Do not attempt realtime connection when disabled');
+ assert.match(controls.transcriptStatus.textContent,/Audio lokal tetap direkam, tetapi teks belum tersedia/);
+ assert.equal(getSaves(),0);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-stop'}});await new Promise(r=>setTimeout(r,40));
+ assert.equal(stopped,true);
+ ctx.SIPETAK_TRANSCRIPT.secureLock();
+});

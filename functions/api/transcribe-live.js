@@ -48,7 +48,8 @@ export async function onRequestPost({request,env}){
   transcription:{model:'gpt-live-transcribe',languages:['id'],delay:'low',
    prompt:'Transkripsi bahasa Indonesia untuk rapat Sekretariat DPRD. Pertahankan isi asli, tanpa menambah keputusan.',
    keywords:['SIPETAK','Sekretariat DPRD','Raperda','Renstra','SKP','RHK','Sekwan']},
-  turn_detection:{type:'server_vad',threshold:0.5,prefix_padding_ms:300,silence_duration_ms:700}
+  // gpt-live-transcribe does not support server_vad; client commits audio turns explicitly.
+  turn_detection:null
  }}};
  const form=new FormData();form.set('sdp',sdp);form.set('session',JSON.stringify(session));
  try{

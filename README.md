@@ -1,4 +1,4 @@
-# SIPETAK Pribadi — v3.10.0-rc1
+# SIPETAK Pribadi — v3.10.1-rc2
 
 **Status: RELEASE CANDIDATE / STAGING — BELUM DINYATAKAN SIAP PRODUKSI.**
 
@@ -73,6 +73,10 @@ Pengujian di repositori ini memakai Node dan mock backend; belum ada bukti keber
 - Perbarui *service worker* dan muat ulang aplikasi setelah deploy. Uji dengan rekaman tanpa informasi rahasia sebelum menggunakan audio rapat dinas.
 
 
-## Rekam + teks langsung (v3.10.0-rc1)
+## Rekam + teks langsung (v3.10.1-rc2)
 
 Mode utama: rekam audio WAV lokal sekaligus transkripsi live gpt-live-transcribe via WebRTC. Aktifkan Cloudflare Pages function `/api/transcribe-live` dengan secret OPENAI_API_KEY, D1 TRANSCRIBE_DB, serta `TRANSCRIBE_LIVE_ENABLED=true`. Sistem memerlukan Supabase login, persetujuan, klasifikasi Umum atau Internal, koneksi HTTPS, dan izin mikrofon. Transkrip disimpan terenkripsi hanya setelah koreksi/konfirmasi pengguna. Klasifikasi Terbatas tidak dikirim ke layanan eksternal. Sesinya dibatasi pada pengguna melalui kuota D1, tetapi durasi/billing server-side harus dimonitor sebelum rilis produksi. Teks dapat muncul tertunda dan bagian yang masih sementara dapat berubah; uji Safari iPhone nyata wajib sebelum deploy utama.
+
+## Perbaikan server transkripsi v3.10.1-rc2
+
+Jika tampilan menyebut "transkripsi server belum diaktifkan", buka **Transkripsi Suara → Periksa kesiapan server** untuk melihat komponen cloud yang belum siap. Baca `docs/PERBAIKAN-TEKS-LANGSUNG-3.10.1-rc2.md` dan aktifkan variable/secret/binding pada Cloudflare Pages. Browser tidak dapat mengaktifkan layanan atau mengetahui kunci API secara otomatis. Dalam mode gagal, audio WAV tetap direkam lokal, **bukan** transkrip realtime. Tidak ada migrasi data Supabase.

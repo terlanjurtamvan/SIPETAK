@@ -6,7 +6,16 @@
 (function(root){
  const LIMIT=80000;
  function create({onText=()=>{},onStatus=()=>{},onError=()=>{}}={}){
-  const entries=new Map();let peer=null,channel=null,stopped=false,established=false;
+  const entries=new Map();let peer=null,channel=null,stopped=false,established=false,commitTimer=null;
+  function commit(){
+   if(!stopped&&channel?.readyState==='open'){
+    // gpt-live-transcribe does not support server VAD. Commit audio periodically
+    // so each spoken segment can produce a finalized transcript.
+    channel.send(JSON.stringify({type:'input_audio_buffer.commit'}));return true;
+   }
+   return false;
+  }
+  function clearCommitTimer(){if(commitTimer!==null){clearInterval(commitTimer);commitTimer=null;}}
   function combined(){return Array.from(entries.values()).map(v=>v.final||v.partial).filter(Boolean).join('\n').slice(0,LIMIT);}
   function update(){onText(combined(),{complete:[...entries.values()].filter(v=>v.final).length,partial:[...entries.values()].some(v=>!!v.partial&&!v.final)});}
   function accept(event){
@@ -20,6 +29,9 @@
     if(!entries.has(id))entries.set(id,{partial:'',final:''});
     const item=entries.get(id);item.final=event.transcript.trim().slice(0,LIMIT);item.partial='';update();
    }else if(event.type==='error'){
+    // The commit timer can fire during silence. Empty buffers are harmless.
+    const code=String(event.error?.code||'');
+    if(code==='input_audio_buffer_commit_empty'||code==='input_audio_buffer_empty')return;
     onError(String(event.error?.message||'Layanan transkripsi langsung mengalami kesalahan.').slice(0,200));
    }else if(event.type==='session.updated'||event.type==='session.created'){
     onStatus('Tersambung. Teks akan muncul saat Anda berbicara.');
@@ -31,6 +43,11 @@
    const p=new root.RTCPeerConnection();peer=p;
    p.addTrack(stream.getAudioTracks()[0],stream);
    channel=p.createDataChannel('oai-events');
+   channel.onopen=()=>{
+    if(stopped)return;
+    onStatus('Koneksi teks aktif. Berbicara secara normal; teks akan muncul bertahap.');
+    clearCommitTimer();commitTimer=setInterval(commit,6000);
+   };
    channel.onmessage=e=>{try{accept(JSON.parse(e.data));}catch{}};
    channel.onerror=()=>onError('Koneksi teks langsung bermasalah. Simpan rekaman audio sebelum meninggalkan halaman.');
    p.onconnectionstatechange=()=>{
@@ -55,15 +72,16 @@
   async function stop({graceMs=1300}={}){
    if(stopped)return combined();
    // Briefly allow the final VAD transcript to arrive after recording stops.
+   commit();
    if(graceMs>0)await new Promise(resolve=>setTimeout(resolve,Math.min(graceMs,2000)));
-   stopped=true;
+   stopped=true;clearCommitTimer();
    try{channel?.close();}catch{}
    try{peer?.close();}catch{}
    peer=null;channel=null;
    return combined();
   }
-  function abort(){stopped=true;try{channel?.close();}catch{}try{peer?.close();}catch{}peer=null;channel=null;}
-  return {connect,accept,stop,abort,combined,get established(){return established;}};
+  function abort(){stopped=true;clearCommitTimer();try{channel?.close();}catch{}try{peer?.close();}catch{}peer=null;channel=null;}
+  return {connect,accept,stop,abort,commit,combined,get established(){return established;}};
  }
  root.SIPETAK_LIVE_ENGINE={create};
 })(typeof window!=='undefined'?window:globalThis);

@@ -39,6 +39,7 @@
     <div class="field"><label for="transcriptClass">Klasifikasi rekaman</label><select id="transcriptClass" ${readonly?'disabled':''}>${allowedClass.map(x=>`<option ${x===draft.classification?'selected':''}>${x}</option>`).join('')}</select><p class="hint">Klasifikasi Terbatas tidak boleh dikirim ke layanan transkripsi eksternal.</p></div>
     <div class="field"><label for="transcriptFile">Unggah rekaman (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
     <div class="transcript-grid-actions"><button class="btn transcript-live-start" data-action="transcript-live" ${readonly?'disabled':''}>🔴 Mulai Rekam + Teks Langsung</button><button class="btn secondary" data-action="transcript-record" ${readonly?'disabled':''}>● Rekam audio saja</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button><button class="btn secondary" data-action="transcript-record-wav" ${readonly?'disabled':''}>🎙 Rekam kompatibel (WAV)</button><button class="btn secondary" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Dikte browser (Umum)</button></div><p class="hint">Rekam + Teks Langsung membutuhkan internet, sesi Supabase, dan aktivasi layanan pada Cloudflare. Suara dikirim saat perekaman berlangsung setelah persetujuan. Teks muncul bertahap setelah koneksi berhasil; kata sementara bisa dikoreksi AI. Durasi maksimal 10 menit per sesi. Pada iPhone gunakan Safari dengan layar menyala.</p>
+    <div class="transcript-service-check"><button type="button" class="btn ghost" data-action="transcript-service-check">↻ Periksa kesiapan server</button><p id="transcriptServiceStatus" class="hint" role="status" aria-live="polite">Status server belum diperiksa. Jika tidak aktif, rekaman WAV tetap bisa dibuat tetapi teks tidak akan muncul.</p></div>
     <div id="transcriptLiveBanner" class="transcript-live-banner" role="status" aria-live="polite">Belum merekam. Tekan tombol Rekam + Teks Langsung untuk menampilkan teks sambil berbicara.</div>
     <div id="transcriptPreview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)})</p>`:''}</div>
     <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya sudah memperoleh izin perekaman dan memastikan konten ini boleh diproses oleh layanan pengenal suara sesuai aturan instansi.</label>
@@ -89,6 +90,18 @@
   const saveBtn=document.querySelector?.('[data-action="transcript-save"]');if(saveBtn)saveBtn.disabled=active;
   const startBtn=document.querySelector?.('[data-action="transcript-live"]');if(startBtn){startBtn.disabled=active;startBtn.textContent=active?'🔴 Sedang merekam & mengetik…':'🔴 Mulai Rekam + Teks Langsung';}
  }
+ async function checkServerStatus(){
+  if(!root.SIPETAK_TRANSCRIBE_SERVICE)throw Error('Modul pemeriksa server belum dimuat. Perbarui cache SIPETAK.');
+  const panel=el('transcriptServiceStatus');
+  if(panel)panel.textContent='Memeriksa pengaturan server…';
+  try {
+   const result=await root.SIPETAK_TRANSCRIBE_SERVICE.check();
+   const msg='Teks langsung: '+root.SIPETAK_TRANSCRIBE_SERVICE.statusMessage(result.live)
+     +' Transkripsi file: '+(result.upload.ready?'siap konfigurasi':'belum aktif ('+String(result.upload.reason)+')')+'.';
+   if(panel)panel.textContent=msg;
+   return result;
+  }catch(error){if(panel)panel.textContent=error.message;throw error;}
+ }
  async function startLive(){
   if(liveStarting||recordStarting||recordStopping||recorder||working)throw Error('Ada perekaman atau proses lain yang masih berjalan. Tekan Hentikan dahulu.');
   if(!available()||myYearArchived())throw Error('Brankas harus dibuka dan tahun aktif tidak boleh diarsipkan.');
@@ -104,6 +117,10 @@
   try{
    stopDictation();
    // This must be invoked in the original tap gesture for iOS Web Audio activation.
+   // Start capturing during the user's direct tap (Safari Web Audio gesture requirement).
+   // Check server readiness concurrently, never expose API keys in the browser.
+   const readinessPromise=root.SIPETAK_TRANSCRIBE_SERVICE?.check?.()
+     .catch(error=>({live:{ready:false,reason:'unknown'},message:error.message}));
    const recordingPromise=root.SIPETAK_RECORDER.start({forceWav:true,onLimit:(file,error)=>{
     if(discardOnStop)return;
     if(recorder){recorder=null;liveHandle?.stop({graceMs:0}).catch(()=>{});liveHandle=null;}
@@ -116,6 +133,17 @@
    if(epoch!==recorderEpoch){session.abort();return;}
    recorder=session;discardOnStop=false;previewAudio(null);
    liveTimer=setTimeout(()=>{if(recorder===session)stopRecording().catch(e=>status(e.message,true));},10*60*1000);
+   status('Audio sedang direkam di perangkat. Memeriksa server teks langsung…');
+   const readiness=await readinessPromise;
+   if(epoch!==recorderEpoch)return;
+   if(readiness&&!readiness.live?.ready){
+    const detail=readiness.message||root.SIPETAK_TRANSCRIBE_SERVICE.statusMessage(readiness.live);
+    const btn=document.querySelector?.('[data-action="transcript-live"]');
+    if(btn)btn.textContent='● Rekam audio saja (server belum siap)';
+    const panel=el('transcriptServiceStatus');if(panel)panel.textContent=detail;
+    status('Audio lokal tetap direkam, tetapi teks belum tersedia: '+detail+' Tekan Hentikan untuk menyimpan WAV, lalu unduh. Jangan mengira teks sudah dibuat.',true);
+    return;
+   }
    status('Audio sedang direkam di perangkat. Menghubungkan teks langsung…');
    const live=root.SIPETAK_LIVE_ENGINE.create({
     onText:(value)=>{
@@ -304,7 +332,7 @@
  function leave(){stopAll();}
  function secureLock(){discardOnStop=true;stopAll();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=null;draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};}
  function action(button){const a=button?.dataset?.action||'';if(!a.startsWith('transcript-'))return false;
-  const actions={'transcript-live':startLive,'transcript-record':()=>startRecording(false),'transcript-record-wav':()=>startRecording(true),'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
+  const actions={'transcript-live':startLive,'transcript-service-check':checkServerStatus,'transcript-record':()=>startRecording(false),'transcript-record-wav':()=>startRecording(true),'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
   // Execute immediately within the real tap/click gesture (important for iOS microphone/Web Audio permissions).
   try{Promise.resolve(actions[a]?.()).catch(e=>{if(e.name==='AbortError')status('Permintaan dibatalkan.');else status(e.message||'Operasi gagal.',true);});}
   catch(e){status(e.message||'Operasi gagal.',true);}return true;

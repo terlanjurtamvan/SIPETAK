@@ -26,3 +26,30 @@ test('invalid events ignored, server error visibly reported, abort ignores late 
  session.abort();session.accept({type:'conversation.item.input_audio_transcription.delta',item_id:'a',delta:'again'});
  assert.equal(session.combined(),'');
 });
+
+test('manual commit cannot send while the realtime data channel is closed',()=>{
+ const {session}=instance();assert.equal(session.commit(),false);session.abort();assert.equal(session.commit(),false);
+});
+
+test('WebRTC data channel sends manual commit and flushes final turn',async()=>{
+ const messages=[];let dc;
+ class FakePC{
+  constructor(){this.connectionState='new';}
+  addTrack(){}
+  createDataChannel(){dc={readyState:'open',send:s=>messages.push(JSON.parse(s)),close(){this.readyState='closed'}};return dc;}
+  async createOffer(){return {sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'};}
+  async setLocalDescription(){}
+  async setRemoteDescription(){}
+  close(){}
+ }
+ const ctx={window:null,RTCPeerConnection:FakePC,setInterval,clearInterval,setTimeout,fetch:async()=>new Response('v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n',{status:201})};ctx.window=ctx;
+ vm.runInNewContext(code,ctx);
+ const session=ctx.SIPETAK_LIVE_ENGINE.create();
+ await session.connect({stream:{getAudioTracks:()=>[{}]},token:'token',classification:'Umum'});
+ dc.onopen();
+ assert.equal(session.commit(),true);
+ assert.deepEqual(messages.at(-1),{type:'input_audio_buffer.commit'});
+ await session.stop({graceMs:0});
+ assert.equal(messages.length,2);
+ assert.equal(session.commit(),false);
+});

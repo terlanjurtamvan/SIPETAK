@@ -27,6 +27,7 @@ test('authenticated live SDP is forwarded with transcription-only session config
   assert.equal(config.type,'transcription');
   assert.equal(config.audio.input.transcription.model,'gpt-live-transcribe');
   assert.equal(config.audio.input.transcription.languages[0],'id');
+  assert.equal(config.audio.input.turn_detection,null,'gpt-live-transcribe must not use server_vad');
   assert.equal(captured.options.headers.Authorization,'Bearer server-secret');
  }finally{globalThis.fetch=old;}
 });
