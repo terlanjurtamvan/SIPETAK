@@ -28,9 +28,9 @@ const tick=()=>new Promise(r=>setTimeout(r,15));
 test('module renders a navigation page without unescaped title and stores editable draft',async()=>{
  const {ctx,controls,data,getSaves}=build();
  const html=ctx.SIPETAK_TRANSCRIPT.page();
- assert.match(html,/Transkripsi Suara & Notulensi/);
- assert.match(html,/Ubah rekaman menjadi teks/);
- assert.ok(!html.includes('<script>'));assert.ok(html.includes('Unggah rekaman'));
+ assert.match(html,/Ketik Langsung dari Suara/);
+ assert.match(html,/Mulai Ketik Langsung/);
+ assert.ok(!html.includes('<script>'));assert.ok(html.includes('Unggah file'));assert.ok(!html.includes('Periksa kesiapan server'));
  assert.equal(ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-save'}}),true);
  await tick();
  assert.equal(getSaves(),1);assert.equal(data.transcriptions.length,1);
@@ -70,7 +70,7 @@ test('one tap starts WAV recording and live text in the same draft without auto 
   connect:async({stream,classification})=>{streamSeen=stream.getAudioTracks().length===1&&classification==='Internal';onText('Rapat sudah dimulai');},
   stop:async()=>'',abort:()=>{}
  })};
- assert.match(ctx.SIPETAK_TRANSCRIPT.page(),/Mulai Rekam \+ Teks Langsung/);
+ assert.match(ctx.SIPETAK_TRANSCRIPT.page(),/Mulai Ketik Langsung/);
  ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-live'}});await new Promise(r=>setTimeout(r,25));
  assert.equal(streamSeen,true);
  assert.match(controls.transcriptText.value,/Rapat sudah dimulai/);

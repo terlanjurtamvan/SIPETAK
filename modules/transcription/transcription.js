@@ -5,7 +5,7 @@
  const allowedClass=['Umum','Internal','Terbatas'];
  let draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};
  let audioFile=null,audioUrl='',recorder=null,recordStarting=false,recordStopping=false,working=false,controller=null;
- let recognition=null,speechBase='',speechResults=[],discardOnStop=false,recorderEpoch=0;
+ let recognition=null,speechBase='',speechCommitted='',speechResults=[],dictationWanted=false,dictationRetryTimer=null,dictationRestarts=0,dictationHadResults=false,dictationLastError='',discardOnStop=false,recorderEpoch=0;
  let liveHandle=null,liveStarting=false,liveBaseText='',liveConnected=false,liveTimer=null;
  const el=id=>document.getElementById(id);
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -31,24 +31,29 @@
   if(!available())return '<section class="card">Brankas harus dibuka dahulu.</section>';
   const readonly=!!myYearArchived(),list=records().filter(x=>Number(x.performanceYear)===Number(myActiveYear())).slice().reverse();
   const meetingChoices=myItems('meetings').map(m=>`<option value="${esc(m.id)}" ${draft.meetingId===m.id?'selected':''}>${esc(m.title||'Agenda tanpa nama')}</option>`).join('');
-  return `<div class="section-head"><div><h3>🎙 Transkripsi Suara & Notulensi</h3><p>Tekan Rekam + Teks Langsung: suara direkam dan teks muncul selama Anda berbicara. Periksa hasil sebelum digunakan.</p></div></div>
-  <div class="callout warn"><b>Privasi:</b> Audio hanya dikirim ke penyedia AI setelah Anda menyetujui. Jangan kirim rapat rahasia/terbatas atau rapat yang belum mendapat izin rekam. Hasil AI bisa keliru. Brankas hanya menyimpan teks yang Anda setujui, bukan audio. Mode dikte browser bisa menggunakan layanan pengenal suara pihak ketiga.</div>
+  return `<div class="section-head"><div><h3>🎤 Ketik Langsung dari Suara</h3><p>Tekan Mulai Ketik Langsung, berbicara, dan tulisan muncul. Tanpa konfigurasi server SIPETAK.</p></div></div>
+  <div class="callout warn"><b>Privasi:</b> Dikte browser dapat memakai layanan pengenal suara milik penyedia browser. Jangan gunakan untuk materi Terbatas atau materi internal yang tidak diizinkan diproses pihak ketiga. Teks perlu diperiksa; hanya teks yang Anda simpan masuk ke brankas, bukan audio.</div>
   <div class="transcript-pane">
    <section class="card transcript-card">
     <div class="field"><label for="transcriptTitle">Nama kegiatan / agenda</label><input id="transcriptTitle" maxlength="160" placeholder="Contoh: Rapat pembahasan Raperda" value="${esc(draft.title)}" ${readonly?'disabled':''}></div>
-    <div class="field"><label for="transcriptClass">Klasifikasi rekaman</label><select id="transcriptClass" ${readonly?'disabled':''}>${allowedClass.map(x=>`<option ${x===draft.classification?'selected':''}>${x}</option>`).join('')}</select><p class="hint">Klasifikasi Terbatas tidak boleh dikirim ke layanan transkripsi eksternal.</p></div>
-    <div class="field"><label for="transcriptFile">Unggah rekaman (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
-    <div class="transcript-grid-actions"><button class="btn transcript-live-start" data-action="transcript-live" ${readonly?'disabled':''}>🔴 Mulai Rekam + Teks Langsung</button><button class="btn secondary" data-action="transcript-record" ${readonly?'disabled':''}>● Rekam audio saja</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button><button class="btn secondary" data-action="transcript-record-wav" ${readonly?'disabled':''}>🎙 Rekam kompatibel (WAV)</button><button class="btn secondary" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Dikte browser (Umum)</button></div><p class="hint">Rekam + Teks Langsung membutuhkan internet, sesi Supabase, dan aktivasi layanan pada Cloudflare. Suara dikirim saat perekaman berlangsung setelah persetujuan. Teks muncul bertahap setelah koneksi berhasil; kata sementara bisa dikoreksi AI. Durasi maksimal 10 menit per sesi. Pada iPhone gunakan Safari dengan layar menyala.</p>
-    <div class="transcript-service-check"><button type="button" class="btn ghost" data-action="transcript-service-check">↻ Periksa kesiapan server</button><p id="transcriptServiceStatus" class="hint" role="status" aria-live="polite">Status server belum diperiksa. Jika tidak aktif, rekaman WAV tetap bisa dibuat tetapi teks tidak akan muncul.</p></div>
-    <div id="transcriptLiveBanner" class="transcript-live-banner" role="status" aria-live="polite">Belum merekam. Tekan tombol Rekam + Teks Langsung untuk menampilkan teks sambil berbicara.</div>
-    <div id="transcriptPreview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)})</p>`:''}</div>
-    <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya sudah memperoleh izin perekaman dan memastikan konten ini boleh diproses oleh layanan pengenal suara sesuai aturan instansi.</label>
-    <div class="transcript-grid-actions"><button class="btn" data-action="transcript-process" ${readonly?'disabled':''}>✦ Ubah rekaman menjadi teks</button><button class="btn ghost" data-action="transcript-cancel" >Batal proses</button></div>
+    <div class="field"><label for="transcriptClass">Klasifikasi materi</label><select id="transcriptClass" ${readonly?'disabled':''}>${allowedClass.map(x=>`<option ${x===draft.classification?'selected':''}>${x}</option>`).join('')}</select><p class="hint">Klasifikasi Terbatas tidak boleh dikirim ke layanan transkripsi eksternal.</p></div>
+    <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya mengizinkan pengenalan suara melalui browser sesuai aturan instansi. Layanan browser mungkin memproses suara secara online.</label>
+    <div class="transcript-primary-actions"><button class="btn transcript-live-start" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Mulai Ketik Langsung</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button></div>
+    <p class="hint transcript-direct-hint">Bicara bahasa Indonesia, teks langsung ditulis di bawah. Tidak membutuhkan pengaturan AI, Cloudflare, atau kunci API SIPETAK. <b>Mode ini hanya menghasilkan teks, bukan file audio.</b> Jika Safari menghentikan dikte, tekan Mulai lagi untuk melanjutkan tulisan yang ada.</p>
+    <div id="transcriptLiveBanner" class="transcript-live-banner" role="status" aria-live="polite">Siap mengetik dari suara. Tekan Mulai Ketik Langsung.</div>
+    <p class="hint transcript-keyboard-fallback">Jika tombol tidak didukung iPhone: ketuk kolom teks, lalu ketuk ikon mikrofon pada keyboard iPhone. Tulisan tetap masuk ke kolom yang sama dan dapat disimpan.</p>
+    <details class="transcript-audio-tools"><summary>Rekam atau unggah file audio (pilihan tambahan)</summary>
+      <div class="field"><label for="transcriptFile">Unggah file (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
+      <div class="transcript-grid-actions"><button class="btn secondary" data-action="transcript-record-wav" ${readonly?'disabled':''}>🎙 Mulai rekam WAV</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan rekaman</button></div>
+      <p class="hint">Mode audio terpisah dari ketik langsung di iPhone. Rekaman disimpan sementara di halaman, bukan otomatis di brankas. Simpan file jika diperlukan.</p>
+      <div id="transcriptPreview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)})</p>`:''}</div>
+      <p class="hint">Untuk memperoleh teks tanpa pengaturan server, gunakan tombol Mulai Ketik Langsung di atas; hasil audio rekaman tidak otomatis menjadi teks.</p>
+    </details>
     <p class="transcript-status" id="transcriptStatus" role="status" aria-live="polite"></p>
-    <div class="field"><label for="transcriptText">Teks dari suara — muncul langsung di sini, koreksi setelah berhenti</label><textarea id="transcriptText" maxlength="80000" placeholder="Saat Rekam + Teks Langsung aktif, kata-kata muncul di sini. Anda juga boleh menempel hasil dari perangkat lain atau mengetik manual." ${readonly?'disabled':''}>${esc(draft.text)}</textarea><p class="hint">${draft.text.length.toLocaleString('id-ID')} karakter. Periksa nama, angka, kutipan, dan keputusan secara manual.</p></div>
+    <div class="field"><label for="transcriptText">Hasil Ketik Langsung — koreksi sebelum menyimpan</label><textarea id="transcriptText" maxlength="80000" placeholder="Tulisan langsung muncul di sini. Anda juga bisa mengetik lewat mikrofon keyboard iPhone, menempel teks, atau mengoreksi hasil." ${readonly?'disabled':''}>${esc(draft.text)}</textarea><p class="hint">${draft.text.length.toLocaleString('id-ID')} karakter. Periksa nama, angka, kutipan, dan keputusan secara manual.</p></div>
     <label class="transcript-prompt"><input type="checkbox" id="transcriptVerified" ${draft.verified?'checked':''} ${readonly?'disabled':''}> Saya sudah membaca dan mengoreksi teks di atas. Simpan sebagai <b>draf pribadi</b>, bukan dokumen resmi.</label>
     <div class="transcript-grid-actions"><button class="btn" data-action="transcript-save" ${readonly?'disabled':''}>✓ Simpan teks terenkripsi</button><button class="btn secondary" data-action="transcript-new">＋ Transkrip baru</button><button class="btn ghost" data-action="transcript-export">↓ Unduh TXT</button></div>
-    <h4>Hasil dari satu rekaman</h4><p class="hint">Satu kali transkrip disimpan, semua jenis draf dapat dihasilkan tanpa mengetik ulang.</p><div class="transcript-grid-actions"><button class="btn" data-action="transcript-bundle">✦ Buat semua draf sekaligus</button><button class="btn secondary" data-action="transcript-export-bundle">↓ Unduh paket draf TXT</button></div><div class="transcript-results">${[['minutes','Draf notulensi'],['summary','Petikan bahan ringkasan'],['followup','Calon tindak lanjut'],['evidence','Metadata bukti dukung']].map(([id,label])=>`<button class="btn secondary" data-action="transcript-output" data-kind="${id}">${label}</button>`).join('')}</div>
+    <h4>Hasil dari satu teks</h4><p class="hint">Satu kali transkrip disimpan, semua jenis draf dapat dihasilkan tanpa mengetik ulang.</p><div class="transcript-grid-actions"><button class="btn" data-action="transcript-bundle">✦ Buat semua draf sekaligus</button><button class="btn secondary" data-action="transcript-export-bundle">↓ Unduh paket draf TXT</button></div><div class="transcript-results">${[['minutes','Draf notulensi'],['summary','Petikan bahan ringkasan'],['followup','Calon tindak lanjut'],['evidence','Metadata bukti dukung']].map(([id,label])=>`<button class="btn secondary" data-action="transcript-output" data-kind="${id}">${label}</button>`).join('')}</div>
     <div id="transcriptOutput" class="transcript-output" aria-live="polite"></div>
    </section>
    <aside class="card transcript-card">
@@ -197,6 +202,7 @@
   status(message||'Rekaman selesai. Putar audio untuk memastikan terdengar sebelum menekan Ubah rekaman menjadi teks.');
  }
  async function stopRecording(){
+  if(dictationWanted||recognition){stopDictation(true);return;}
   if(recordStarting||liveStarting)throw Error('Mikrofon/koneksi sedang disiapkan. Tekan Hentikan setelah proses awal selesai.');
   if(recordStopping)return;
   if(!recorder){status('Tidak ada rekaman aktif.');return;}
@@ -208,25 +214,89 @@
    if(!discardOnStop)finishedAudio(file,'Rekaman dihentikan. Teks yang muncul dapat diperiksa dan disimpan. Audio tetap lokal sampai Anda memilih untuk mengirimnya.');
   }finally{clearTimeout(liveTimer);liveTimer=null;if(recorder===session)recorder=null;recordStopping=false;markLiveEditing(false);}
  }
- function stopDictation(){if(recognition){const r=recognition;recognition=null;try{r.stop();}catch{}}}
- function startDictation(){
-  if(recognition){stopDictation();status('Dikte dihentikan. Periksa dan koreksi hasilnya.');return;}
-  if(!draft.consent)throw Error('Centang persetujuan pemrosesan suara sebelum mulai dikte.');
-  if(draft.classification!=='Umum')throw Error('Dikte browser hanya untuk klasifikasi Umum. Gunakan pengetikan manual untuk materi internal/terbatas.');
-  const Speech=root.SpeechRecognition||root.webkitSpeechRecognition;
-  if(!Speech)throw Error('Dikte langsung tidak tersedia di browser ini. Gunakan Rekam atau Unggah, lalu transkripsikan.');
-  const r=new Speech();speechBase=draft.text;speechResults=[];r.lang='id-ID';r.continuous=true;r.interimResults=true;
+ function setDictationButton(active){
+  const button=document.querySelector?.('[data-action="transcript-dictate"]');
+  if(button){button.textContent=active?'⏹ Berhenti Ketik Langsung':'🎤 Mulai Ketik Langsung';button.setAttribute?.('aria-pressed',active?'true':'false');}
+  const banner=el('transcriptLiveBanner');if(banner)banner.classList?.toggle?.('is-live',active);
+ }
+ function updateSpeechText(cycleText){
+  const base=[speechBase,speechCommitted,cycleText].filter(Boolean).join(' ').trim();
+  draft.text=base.slice(0,U.MAX_TEXT_CHARS);draft.verified=false;
+  const area=el('transcriptText');if(area){area.value=draft.text;area.scrollTop=area.scrollHeight;}
+  const box=el('transcriptVerified');if(box)box.checked=false;
+ }
+ function stopDictation(announce=false){
+  dictationWanted=false;
+  if(dictationRetryTimer){clearTimeout(dictationRetryTimer);dictationRetryTimer=null;}
+  const r=recognition;recognition=null;
+  if(r){try{r.stop();}catch{try{r.abort?.();}catch{}}}
+  setDictationButton(false);
+  if(announce)status('Ketik langsung dihentikan. Teks tetap tersedia. Periksa lalu simpan.');
+ }
+ function startSpeechCycle(Speech){
+  if(!dictationWanted)return;
+  const r=new Speech(),pieces=[];
+  recognition=r;dictationHadResults=false;dictationLastError='';
+  r.lang='id-ID';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
+  r.onstart=()=>{if(recognition===r)status('🎤 Mendengarkan… Silakan bicara. Tulisan akan muncul di bawah.');};
   r.onresult=event=>{
-   for(let i=event.resultIndex;i<event.results.length;i++)speechResults[i]={text:event.results[i][0].transcript,final:event.results[i].isFinal};
-   const text=(speechBase+' '+speechResults.map(x=>x.text).join(' ')).trim().slice(0,U.MAX_TEXT_CHARS);
-   draft.text=text;draft.verified=false;
-   const area=el('transcriptText');if(area)area.value=text;
-   const checkbox=el('transcriptVerified');if(checkbox)checkbox.checked=false;
-   status('Dikte berjalan. Teks sementara bisa berubah; jangan tutup halaman.');
+   if(recognition!==r||!dictationWanted)return;
+   for(let i=event.resultIndex;i<event.results.length;i++){
+    const line=event.results[i];pieces[i]=String(line?.[0]?.transcript||'').trim();
+   }
+   dictationHadResults=true;dictationRestarts=0;
+   updateSpeechText(pieces.filter(Boolean).join(' '));
+   status('🎤 Teks sedang ditulis… Silakan lanjut bicara.');
   };
-  r.onerror=e=>status('Dikte browser: '+String(e.error||'tidak tersedia')+'. Coba rekam/upload.',true);
-  r.onend=()=>{if(recognition===r){recognition=null;status('Dikte selesai. Periksa seluruh teks sebelum menyimpan.');}};
-  recognition=r;r.start();status('Dikte berjalan. Ucapkan dengan jelas. Ketuk tombol dikte lagi untuk berhenti.');
+  r.onerror=e=>{
+   if(recognition!==r)return;
+   const code=String(e.error||'unknown');dictationLastError=code;
+   const msgs={
+    'not-allowed':'Izin mikrofon ditolak. Izinkan akses mikrofon di Safari, atau gunakan mikrofon keyboard iPhone.',
+    'service-not-allowed':'Layanan dikte browser tidak diizinkan. Ketuk kolom teks lalu gunakan mikrofon keyboard iPhone.',
+    'network':'Layanan pengenal suara browser tidak tersambung. Periksa koneksi internet atau gunakan mikrofon keyboard iPhone.',
+    'no-speech':'Suara tidak terdengar. Coba berbicara dekat mikrofon.',
+    'audio-capture':'Mikrofon tidak tersedia. Tutup perekam audio lain dan coba lagi.',
+    'language-not-supported':'Bahasa Indonesia tidak didukung pengenal suara browser ini; gunakan mikrofon keyboard iPhone.'
+   };
+   const recoverable=code==='no-speech';
+   if(!recoverable)dictationWanted=false;
+   status(msgs[code]||('Dikte browser berhenti ('+code+'). Gunakan mikrofon keyboard iPhone jika perlu.'),true);
+  };
+  r.onend=()=>{
+   if(recognition!==r)return;
+   recognition=null;
+   const complete=pieces.filter(Boolean).join(' ').trim();
+   if(complete){speechCommitted=[speechCommitted,complete].filter(Boolean).join(' ');updateSpeechText('');}
+   if(dictationWanted&&dictationRestarts<2){
+    dictationRestarts++;
+    status('Safari menjeda dikte. Mencoba melanjutkan…');
+    dictationRetryTimer=setTimeout(()=>{
+     dictationRetryTimer=null;
+     if(!dictationWanted)return;
+     try{startSpeechCycle(Speech);}catch(e){dictationWanted=false;setDictationButton(false);status('Dikte dijeda Safari. Tekan Mulai Ketik Langsung lagi untuk melanjutkan. Teks tidak hilang.',true);}
+    },350);
+    return;
+   }
+   dictationWanted=false;setDictationButton(false);
+   if(!dictationLastError)status('Dikte berhenti. Tekan Mulai lagi untuk melanjutkan, atau periksa dan simpan teks.');
+  };
+  r.start();
+ }
+ function startDictation(){
+  if(dictationWanted){stopDictation(true);return;}
+  if(recorder||recordStarting||recordStopping||liveStarting||working)throw Error('Hentikan perekaman audio atau proses lain sebelum ketik langsung. Di iPhone keduanya dijalankan terpisah.');
+  if(!available()||myYearArchived())throw Error('Buka brankas SIPETAK dan pilih tahun yang masih aktif.');
+  updateDraftFromUI();
+  if(!draft.consent)throw Error('Centang izin pengenalan suara terlebih dahulu.');
+  if(draft.classification==='Terbatas')throw Error('Materi Terbatas tidak boleh diproses oleh layanan dikte browser. Gunakan input teks manual yang sesuai kebijakan instansi.');
+  const Speech=root.SpeechRecognition||root.webkitSpeechRecognition;
+  if(!Speech)throw Error('Browser ini belum mendukung tombol dikte. Ketuk kolom teks, lalu tekan mikrofon pada keyboard iPhone untuk mengetik langsung.');
+  if(root.isSecureContext===false)throw Error('Dikte browser memerlukan situs HTTPS. Buka SIPETAK melalui alamat https.');
+  speechBase=draft.text.trim();speechCommitted='';speechResults=[];dictationRestarts=0;dictationWanted=true;draft.verified=false;
+  const verify=el('transcriptVerified');if(verify)verify.checked=false;
+  try{startSpeechCycle(Speech);setDictationButton(true);status('🎤 Mengaktifkan dikte browser. Izinkan mikrofon jika diminta.');}
+  catch(error){dictationWanted=false;recognition=null;setDictationButton(false);throw error;}
  }
  function requireChecked(){
   if(!available())throw Error('Brankas terkunci.');

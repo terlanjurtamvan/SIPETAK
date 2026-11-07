@@ -1,5 +1,5 @@
 {
-  "version": "3.10.1-rc2",
+  "version": "3.11.0-rc1",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -21,7 +21,8 @@
     "microphone permission and MediaRecorder on real iPhone",
     "iPhone real microphone playback after release 3.9.1-rc2",
     "real OpenAI WebRTC live session",
-    "iPhone Safari realtime WebRTC and WAV recording simultaneously"
+    "iPhone Safari realtime WebRTC and WAV recording simultaneously",
+    "real-time speech recognition in user iPhone Safari (partial browser support)"
   ],
   "cloud_data_format": "sipetak-vault-v1 (AES-256-GCM encrypted JSON envelope)",
   "note": "Supabase URL and publishable key centralized in index.html; cloud onboarding for new device",
@@ -52,7 +53,9 @@
     "safari-live-text-with-local-wav-recording",
     "realtime-transcription-event-deltas",
     "live-cloudflare-readiness-check",
-    "transcription-manual-commit-compatible-with-gpt-live-transcribe"
+    "transcription-manual-commit-compatible-with-gpt-live-transcribe",
+    "dikte-browser-sebagai-fitur-utama-tanpa-api-server",
+    "keyboard-dictation-iphone-fallback"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
@@ -62,6 +65,6 @@
   ],
   "deployment_status": "staging-not-production-verified",
   "transcription_backend": "Cloudflare Pages Function /api/transcribe; requires OPENAI_API_KEY + D1 TRANSCRIBE_DB + TRANSCRIBE_ENABLED=true",
-  "notes": "Fix misleading recorder state, add /api/transcribe-status readiness endpoint, remove unsupported gpt-live-transcribe VAD, commit client audio turns every 6s; Cloudflare secrets and production verification still required.",
+  "notes": "Mode utama ketik langsung memakai SpeechRecognition bawaan browser tanpa Cloudflare/OpenAI API. Rekaman WAV terpisah opsional, karena iPhone Safari mungkin tidak dapat menjalankan keduanya bersamaan. Mesin transkripsi server tetap tersedia sebagai integrasi opsional yang belum aktif.",
   "transcription_live_backend": "Cloudflare Pages /api/transcribe-live; OPENAI_API_KEY + TRANSCRIBE_DB + TRANSCRIBE_LIVE_ENABLED=true"
 }
