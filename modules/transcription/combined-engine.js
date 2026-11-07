@@ -32,6 +32,7 @@
     for(let i=event.resultIndex;i<event.results.length;i++){
      parts[i]=String(event.results[i]?.[0]?.transcript||'').trim();
     }
+    parts.length=event.results.length;
     restarts=0;
     publish([committed,parts.filter(Boolean).join(' ')].filter(Boolean).join(' ').trim());
     onState('text-received');
@@ -97,6 +98,9 @@
    ended=true;
    for(const [track,onMute,onEnded] of tracks){track.removeEventListener?.('mute',onMute);track.removeEventListener?.('ended',onEnded);}
    const file=await session.stop();
+   if(Number.isFinite(session.audioPeak)&&session.durationSeconds>=3&&session.audioPeak<0.0015){
+    onError('Audio WAV dibuat, tetapi mikrofon hampir tidak menangkap suara. Putar rekaman sebelum digunakan; jika sunyi, cobalah Rekam WAV saja.','audio-maybe-silent');
+   }
    onFinished(file,null);
    return file;
   }

@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
-function env({speech=true,recorderFails=false}={}){
+function env({speech=true,recorderFails=false,audioPeak}={}){
  const events=[],messages=[],lines=[],recognizers=[];
  const track={muted:false,listeners:{},addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);},removeEventListener(type,fn){this.listeners[type]=(this.listeners[type]||[]).filter(x=>x!==fn);},emit(type){for(const cb of this.listeners[type]||[])cb();}};
  let stopped=false,aborted=false;
  const recorder={start(options){
   events.push('record-start');
   if(recorderFails)return Promise.reject(Error('denied'));
-  return Promise.resolve({stream:{getAudioTracks:()=>[track]},
+  return Promise.resolve({stream:{getAudioTracks:()=>[track]},audioPeak,durationSeconds:4,
    async stop(){stopped=true;events.push('record-stop');return {name:'meeting.wav',size:64000,type:'audio/wav'};},
    abort(){aborted=true;}});
  }};
@@ -76,4 +76,19 @@ test('failed WAV permission stops browser dictation and reports failure',async()
  await assert.rejects(h.ready,/denied/);
  assert.equal(e.messages.at(-1).code,'record-failed');
  assert.equal(e.recognizers[0]?.stop!==undefined,true);
+});
+
+
+test('near-silent microphone audio raises warning but still returns the WAV file',async()=>{
+ const e=env({audioPeak:0.00001});const h=e.make();await h.ready;
+ const file=await h.stop();
+ assert.equal(file.name,'meeting.wav');
+ assert.equal(e.messages.at(-1).code,'audio-maybe-silent');
+ assert.match(e.messages.at(-1).message,/hampir tidak menangkap suara/);
+});
+
+test('audible microphone signal does not produce a false silent-audio warning',async()=>{
+ const e=env({audioPeak:0.2});const h=e.make();await h.ready;
+ await h.stop();
+ assert.equal(e.messages.some(x=>x.code==='audio-maybe-silent'),false);
 });

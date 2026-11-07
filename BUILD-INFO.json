@@ -1,5 +1,5 @@
 {
-  "version": "3.12.0-rc1",
+  "version": "3.12.3-rc1",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -60,7 +60,8 @@
     "one-button-dual-wav-and-native-speech-experimental",
     "microphone-muted-event-warning",
     "independent-audio-and-text-status",
-    "prominent-audio-download"
+    "prominent-audio-download",
+    "notulen-dan-risalah-dprd-konsep-word-cetak-pdf"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
@@ -70,6 +71,25 @@
   ],
   "deployment_status": "staging-not-production-verified",
   "transcription_backend": "Cloudflare Pages Function /api/transcribe; requires OPENAI_API_KEY + D1 TRANSCRIBE_DB + TRANSCRIBE_ENABLED=true",
-  "notes": "Satu tombol memulai perekam WAV dan SpeechRecognition dalam gesture yang sama tanpa API SIPETAK. Tidak menjamin berjalan bersamaan di Safari iPhone, karena WebKit dapat membisukan getUserMedia saat Web Speech aktif. Periksa teks dan file WAV; untuk jaminan gunakan streaming STT melalui server/native. Audio tidak tersimpan permanen sebelum pengguna menekan Unduh.",
-  "transcription_live_backend": "Cloudflare Pages /api/transcribe-live; OPENAI_API_KEY + TRANSCRIBE_DB + TRANSCRIBE_LIVE_ENABLED=true"
+  "notes": "Satu tombol memulai perekam WAV dan SpeechRecognition dalam gesture yang sama tanpa API SIPETAK. Tidak menjamin berjalan bersamaan di Safari iPhone, karena WebKit dapat membisukan getUserMedia saat Web Speech aktif. Periksa teks dan file WAV; untuk jaminan gunakan streaming STT melalui server/native. Audio tidak tersimpan permanen sebelum pengguna menekan Unduh. Versi dokumen menggunakan transkrip yang sudah dihasilkan dan metadata manual; keputusan tidak dibuat otomatis.",
+  "transcription_live_backend": "Cloudflare Pages /api/transcribe-live; OPENAI_API_KEY + TRANSCRIBE_DB + TRANSCRIBE_LIVE_ENABLED=true",
+  "audit_updates": [
+    "recoverable encrypted unverified text autosave",
+    "prevent navigation while recording",
+    "warn before browser unload with unsaved audio",
+    "speech interim stale-result handling",
+    "verified workflow enforcement"
+  ],
+  "reference_integration": {
+    "input": "notulenrek.html (UI/data reference only, no audio recorder)",
+    "adopted": [
+      "sidang period and meeting metadata",
+      "manual speaker and time marks in draft documents"
+    ],
+    "not_adopted": [
+      "React compiled artifact",
+      "Meta AI speech-only recorder"
+    ],
+    "audio_engine_changed": false
+  }
 }

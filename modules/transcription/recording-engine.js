@@ -50,7 +50,7 @@
      source=context.createMediaStreamSource(stream);processor=context.createScriptProcessor(4096,1,1);
      const rate=Number(context.sampleRate)/WAV_RATE;
      if(!Number.isFinite(rate)||rate<=0)throw Error('Kecepatan sampel mikrofon tidak valid.');
-     const collected=[];let length=0,cursor=0,closed=false,stopping=false;
+     const collected=[];let length=0,cursor=0,closed=false,stopping=false,audioPeak=0;
      const maxSamples=Math.floor((maxBytes-44)/2);
      let session;
      processor.onaudioprocess=(event)=>{
@@ -64,7 +64,8 @@
       const produced=values.length;
       cursor+=produced*rate-input.length;
       if(cursor<0)cursor=0;
-      if(produced){collected.push(Float32Array.from(values));length+=produced;}
+      if(produced){const frame=Float32Array.from(values);collected.push(frame);length+=produced;
+       for(let k=0;k<frame.length;k++){const value=Math.abs(frame[k]);if(value>audioPeak)audioPeak=value;}}
       if(length>=maxSamples&&!stopping){
        stopping=true;
        Promise.resolve().then(async()=>{
@@ -75,7 +76,7 @@
      source.connect(processor);processor.connect(context.destination);
      if(context.state!=='running')await context.resume();
      if(context.state!=='running')throw Error('Audio iPhone belum aktif. Tekan Mulai rekam kembali setelah memberi izin mikrofon.');
-     session={mode:'wav',type:'audio/wav',stream,get state(){return closed?'inactive':'recording';},
+     session={mode:'wav',type:'audio/wav',stream,get audioPeak(){return audioPeak;},get durationSeconds(){return length/WAV_RATE;},get state(){return closed?'inactive':'recording';},
       async stop(){if(closed)throw Error('Perekaman sudah dihentikan.');closed=true;processor.onaudioprocess=null;
        try{processor.disconnect();source.disconnect();}catch{}cleanup();
        await context.close().catch(()=>{});

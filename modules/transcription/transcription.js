@@ -2,12 +2,17 @@
 /* SIPETAK Transkripsi: non-destructive feature module. No raw audio is stored in the vault. */
 (function(root){
  const U=root.SIPETAK_TRANSCRIPT_UTILS;
+ const F=root.SIPETAK_FORMAL_DOCS;
+ const emptyFormal=()=>({date:(()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');})(),meetingType:'Rapat',sessionYear:'',sessionPeriod:'',meetingNumber:'',agenda:'',nature:'',place:'',startTime:'',endTime:'',chair:'',secretary:'',notulis:'',attendees:'',invitees:'',summary:'',decisions:'',followup:'',signPlace:''});
+ let formalDetails=emptyFormal();
+ let speakerMarkers=[],speakerSession=0,recordClockStart=0;
  const allowedClass=['Umum','Internal','Terbatas'];
  let draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};
  let audioFile=null,audioUrl='',recorder=null,recordStarting=false,recordStopping=false,working=false,controller=null;
  let recognition=null,speechBase='',speechCommitted='',speechResults=[],dictationWanted=false,dictationRetryTimer=null,dictationRestarts=0,dictationHadResults=false,dictationLastError='',discardOnStop=false,recorderEpoch=0;
  let liveHandle=null,liveStarting=false,liveBaseText='',liveConnected=false,liveTimer=null;
  let combinedHandle=null,combinedStarting=false,combinedStopping=false,combinedHadText=false,combinedMuted=false,combinedProblem='',combinedEpoch=0;
+ let autosaveTimer=null, autosaveBusy=false, autosaveAgain=false, audioDownloadAttempted=false;
  function indicators(audio,text){if(audio&&el('transcriptAudioIndicator'))el('transcriptAudioIndicator').textContent='Audio: '+audio;if(text&&el('transcriptTextIndicator'))el('transcriptTextIndicator').textContent='Teks: '+text;}
  const el=id=>document.getElementById(id);
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -16,11 +21,12 @@
  function records(){if(!available())return [];if(!Array.isArray(data.transcriptions))data.transcriptions=[];return data.transcriptions;}
  function previewAudio(file){
   if(audioUrl)URL.revokeObjectURL(audioUrl);
-  audioUrl='';audioFile=file;
+  audioUrl='';audioFile=file;audioDownloadAttempted=false;
   if(file){audioUrl=URL.createObjectURL(file);draft.filename=file.name;}
   const mount=el('transcriptPreview');if(!mount)return;
   mount.innerHTML=file?`<audio controls preload="metadata" aria-label="Putar rekaman untuk pemeriksaan" src="${esc(audioUrl)}"></audio><p class="hint">${esc(file.name)} (${fmtBytes(file.size)}). Audio masih sementara pada halaman ini.</p><a class="btn secondary transcript-audio-download" href="${esc(audioUrl)}" download="${esc(file.name)}">⬇ Unduh rekaman WAV ke perangkat</a><p class="hint">Di Safari, jika file dibuka, gunakan Bagikan → Simpan ke File. Jangan tutup halaman sebelum tersimpan.</p><p class="transcript-audio-error" id="transcriptAudioError" role="alert" hidden></p>`:'';
   if(!file)return;
+  mount.querySelector('a[download]')?.addEventListener?.('click',event=>{if(event.isTrusted)audioDownloadAttempted=true;});
   const player=mount.querySelector('audio');
   player?.addEventListener('error',()=>{
    const message='Audio tidak dapat diputar di browser ini. Simpan file WAV terlebih dahulu, lalu coba buka lewat Files/Voice Memos di iPhone. Jangan kirim file rusak untuk transkripsi.';
@@ -29,7 +35,68 @@
   });
  }
  function tryAutoDownload(){try{el('transcriptPreview')?.querySelector?.('a[download]')?.click?.();}catch{/* Safari may block automatic downloads; visible link remains. */}}
+ // The auto-backup stores ONLY text in the existing encrypted vault; never store WAV in localStorage.
+ // A recovered draft is intentionally unverified and cannot create official task/evidence links.
+ async function autosaveDraft(){
+  if(!available()||myYearArchived()||!draft.text?.trim())return;
+  if(autosaveBusy){autosaveAgain=true;return;}
+  autosaveBusy=true;
+  try{
+   const recs=records();let current=recs.find(x=>x.id===draft.id);
+   if(current?.verifiedAt && current.text===draft.text && current.title===draft.title && JSON.stringify(F.sanitizeMarkers(current.speakerMarkers||[]))===JSON.stringify(F.sanitizeMarkers(speakerMarkers)) && JSON.stringify(F.meta(current.formalDetails||{}))===JSON.stringify(F.meta(formalDetails)))return;
+   // Never overwrite a confirmed transcript without preserving the original.
+   if(current?.verifiedAt){current=null;draft.id='';}
+   if(!current&&recs.length>=30)throw Error('Riwayat transkrip penuh. Unduh TXT lalu kosongkan riwayat untuk membuat cadangan.');
+   const others=recs.filter(x=>x.id!==current?.id);
+   if(others.reduce((n,x)=>n+String(x.text||'').length,0)+draft.text.length>800000)throw Error('Kapasitas brankas transkrip penuh.');
+   const now=isoNow(),item={id:current?.id||uid('TRS'),title:draft.title.trim()||('Rekaman '+today()),text:draft.text.slice(0,U.MAX_TEXT_CHARS),classification:draft.classification,sourceFilename:draft.filename||'',performanceYear:current?.performanceYear||myActiveYear(),createdAt:current?.createdAt||now,updatedAt:now,verifiedAt:null,classificationNote:'CADANGAN OTOMATIS — BELUM DIPERIKSA',formalDetails:F.meta(formalDetails),speakerMarkers:F.sanitizeMarkers(speakerMarkers)};
+   if(current)Object.assign(current,item);else recs.push(item);
+   draft.id=item.id;await queueSave();
+  }finally{autosaveBusy=false;if(autosaveAgain){autosaveAgain=false;scheduleAutosave(250);}}
+ }
+ function scheduleAutosave(delay=12000){
+  if(autosaveTimer)clearTimeout(autosaveTimer);
+  autosaveTimer=setTimeout(()=>{autosaveTimer=null;autosaveDraft().catch(error=>status('Cadangan teks tidak tersimpan: '+error.message+'. Unduh TXT sekarang.',true));},delay);
+ }
+ function backupTextNow(){if(autosaveTimer){clearTimeout(autosaveTimer);autosaveTimer=null;}
+  return autosaveDraft().catch(error=>status('Cadangan teks gagal: '+error.message+'. Unduh TXT sebelum keluar.',true));
+ }
  function readyOutputs(){try{return U.outputs(draft.title,draft.text,today());}catch{return null;}}
+ function formalField(id,label,wide=false,rows=0,readonly=false){
+  const value=formalDetails[id]||'';
+  return `<div class="field ${wide?'form-wide':''}"><label for="formal_${id}">${esc(label)}</label>${rows?`<textarea id="formal_${id}" maxlength="8000" rows="${rows}" ${readonly?'disabled':''}>${esc(value)}</textarea>`:`<input id="formal_${id}" type="${id==='date'?'date':id==='startTime'||id==='endTime'?'time':'text'}" maxlength="250" value="${esc(value)}" ${readonly?'disabled':''}>`}</div>`;
+ }
+ function formalForm(readonly){
+  return `<details class="transcript-formal-options"><summary>Identitas rapat & hasil terverifikasi — isi sekali untuk dua dokumen</summary><p class="hint">Data opsional. Yang kosong ditandai perlu verifikasi, bukan diisi otomatis oleh SIPETAK.</p><div class="transcript-formal-fields">
+  ${formalField('date','Tanggal (YYYY-MM-DD)',false,0,readonly)}${formalField('meetingType','Jenis rapat (Paripurna/Komisi/Badan/dll.)',false,0,readonly)}
+  ${formalField('sessionYear','Tahun Sidang',false,0,readonly)}${formalField('sessionPeriod','Masa Persidangan',false,0,readonly)}
+  ${formalField('meetingNumber','Rapat Ke-',false,0,readonly)}${formalField('agenda','Acara Rapat',false,0,readonly)}
+  ${formalField('nature','Sifat (terbuka/tertutup)',false,0,readonly)}${formalField('place','Tempat rapat',false,0,readonly)}
+  ${formalField('startTime','Waktu mulai',false,0,readonly)}${formalField('endTime','Waktu selesai',false,0,readonly)}
+  ${formalField('chair','Pimpinan rapat',false,0,readonly)}${formalField('secretary','Sekretaris rapat',false,0,readonly)}
+  ${formalField('notulis','Nama notulis',false,0,readonly)}${formalField('signPlace','Tempat penandatanganan',false,0,readonly)}
+  ${formalField('attendees','Anggota/peserta hadir (sesuai daftar hadir)',true,3,readonly)}${formalField('invitees','Undangan yang hadir',true,2,readonly)}
+  ${formalField('summary','Pokok pembahasan yang sudah diperiksa (opsional)',true,3,readonly)}
+  ${formalField('decisions','Kesimpulan/keputusan — hanya yang benar-benar diputuskan',true,3,readonly)}
+  ${formalField('followup','Tindak lanjut, PIC dan tenggat (jika ada)',true,3,readonly)}
+  </div></details>`;
+ }
+ function formalOptions(){updateDraftFromUI();return {title:draft.title,text:draft.text,transcript:draft.text,classification:draft.classification,details:formalDetails,markers:speakerMarkers};}
+ function markerListHtml(){
+  return speakerMarkers.length?speakerMarkers.slice(-25).map((m,index)=>`<div class="transcript-marker-line">Sesi ${m.session} · ${F.markerTime(m.seconds)} · ${esc(m.speaker)} <span class="hint">(manual)</span></div>`).join(''):'<p class="hint">Belum ada penanda. Mulai rekam untuk menandai pembicara.</p>';
+ }
+ function addSpeakerMarker(speaker){
+  if(!available()||myYearArchived())throw Error('Buka brankas dan pilih tahun yang aktif.');
+  if(!(combinedHandle||recorder))throw Error('Mulai rekaman dahulu, lalu tandai pembicara atau waktu.');
+  if(speakerMarkers.length>=300)throw Error('Penanda sudah mencapai batas 300. Simpan dan mulai sesi rapat baru.');
+  const name=String(speaker||'').trim().slice(0,90);
+  if(!name)throw Error('Masukkan nama atau jabatan pembicara.');
+  const elapsed=Math.max(0,Math.floor((Date.now()-recordClockStart)/1000));
+  speakerMarkers.push({session:speakerSession||1,seconds:elapsed,speaker:name});
+  draft.verified=false;const check=el('transcriptVerified');if(check)check.checked=false;
+  const mount=el('transcriptSpeakerMarkers');if(mount)mount.innerHTML=markerListHtml();
+  scheduleAutosave();status('Penanda manual: '+name+' ('+F.markerTime(elapsed)+') dicatat.');
+ }
  function page(){
   if(!available())return '<section class="card">Brankas harus dibuka dahulu.</section>';
   const readonly=!!myYearArchived(),list=records().filter(x=>Number(x.performanceYear)===Number(myActiveYear())).slice().reverse();
@@ -43,10 +110,15 @@
     <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya sudah mendapat izin merekam dan mengizinkan pengenalan suara browser sesuai aturan instansi.</label>
     <div class="transcript-primary-actions"><button class="btn transcript-live-start" data-action="transcript-combined" ${readonly?'disabled':''}>🔴 Mulai Rekam + Tulis Langsung</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button></div>
     <div id="transcriptLiveBanner" class="transcript-live-banner" role="status" aria-live="polite">Siap. Tekan Mulai, izinkan mikrofon, lalu bicara. Teks muncul jika browser mendukung perekaman dan dikte bersamaan.</div>
-    <p class="hint">Audio direkam sebagai WAV di perangkat. <b>Setelah berhenti, ketuk “Unduh rekaman WAV” agar file tersimpan di iPhone.</b> File belum disimpan otomatis ke brankas.</p><div class="transcript-dual-status"><span id="transcriptAudioIndicator">Audio: belum aktif</span><span id="transcriptTextIndicator">Teks: belum aktif</span></div>
+    <p class="hint">Audio WAV tetap di perangkat dan perlu diunduh. <b>Teks dicadangkan otomatis ke brankas terenkripsi sebagai KONSEP belum diperiksa.</b> Setelah berhenti, ketuk Unduh rekaman WAV agar audio tidak hilang.</p><div class="transcript-dual-status"><span id="transcriptAudioIndicator">Audio: belum aktif</span><span id="transcriptTextIndicator">Teks: belum aktif</span></div>
     <div id="transcriptPreview" class="transcript-preview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)}) · <a href="${esc(audioUrl)}" download="${esc(audioFile.name)}">⬇ Unduh rekaman WAV</a></p>`:''}</div>
     <p class="transcript-status" id="transcriptStatus" role="status" aria-live="polite"></p>
     <div class="field"><label for="transcriptText">Teks otomatis saat merekam — periksa setelah selesai</label><textarea id="transcriptText" maxlength="80000" placeholder="Ucapan yang dikenali browser akan muncul di sini selama merekam. Anda juga dapat mengedit atau menempelkan teks." ${readonly?'disabled':''}>${esc(draft.text)}</textarea><p class="hint">${draft.text.length.toLocaleString('id-ID')} karakter. Periksa nama, angka, kutipan dan keputusan.</p></div>
+    <div class="transcript-speaker-panel"><h4>Penanda Pembicara & Waktu (manual)</h4>
+    <p class="hint">Saat rekaman berjalan, ketuk peran yang sedang berbicara. Penanda waktu tidak mengubah teks otomatis dan tidak mengklaim mengenali suara pembicara.</p>
+    <div class="transcript-grid-actions">${['Ketua Rapat','Anggota','Sekretaris / Setwan','Narasumber'].map(role=>`<button type="button" class="btn secondary" data-action="transcript-marker" data-speaker="${esc(role)}" ${readonly?'disabled':''}>${esc(role)}</button>`).join('')}</div>
+    <div class="transcript-speaker-custom"><label for="transcriptCustomSpeaker">Nama pembicara lain (opsional)</label><input id="transcriptCustomSpeaker" type="text" maxlength="90" placeholder="Nama/jabatan sesuai daftar hadir" ${readonly?'disabled':''}><button type="button" class="btn ghost" data-action="transcript-marker-custom" ${readonly?'disabled':''}>+ Tandai nama</button><button type="button" class="btn ghost" data-action="transcript-marker-time" ${readonly?'disabled':''}>◷ Tandai waktu</button></div>
+    <div id="transcriptSpeakerMarkers" class="transcript-marker-list" aria-live="polite">${markerListHtml()}</div></div>
     <details class="transcript-audio-tools"><summary>Pilihan tambahan jika browser tidak mendukung gabungan</summary>
       <div class="transcript-grid-actions"><button class="btn secondary" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Dikte saja (tanpa audio)</button><button class="btn secondary" data-action="transcript-record-wav" ${readonly?'disabled':''}>🎙️ Rekam WAV saja</button></div>
       <div class="field"><label for="transcriptFile">Atau unggah rekaman (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
@@ -54,6 +126,10 @@
     </details>
     <label class="transcript-prompt"><input type="checkbox" id="transcriptVerified" ${draft.verified?'checked':''} ${readonly?'disabled':''}> Saya sudah membaca dan mengoreksi teks di atas. Simpan sebagai <b>draf pribadi</b>, bukan dokumen resmi.</label>
     <div class="transcript-grid-actions"><button class="btn" data-action="transcript-save" ${readonly?'disabled':''}>✓ Simpan teks terenkripsi</button><button class="btn secondary" data-action="transcript-new">＋ Transkrip baru</button><button class="btn ghost" data-action="transcript-export">↓ Unduh TXT</button></div>
+    <h4>Notulen & Risalah Rapat</h4><p class="hint">Satu transkrip menghasilkan dua konsep dokumen. Hasil Word bisa diedit; cetak bisa disimpan sebagai PDF. <b>Bukan dokumen yang sudah disahkan.</b></p>
+    ${formalForm(readonly)}
+    <div class="transcript-grid-actions"><button class="btn" data-action="transcript-formal-preview" data-kind="notulen">📄 Buat Notulen</button><button class="btn" data-action="transcript-formal-preview" data-kind="risalah">📑 Buat Risalah</button><button class="btn secondary" data-action="transcript-formal-word" data-kind="notulen">↓ Word Notulen</button><button class="btn secondary" data-action="transcript-formal-word" data-kind="risalah">↓ Word Risalah</button></div>
+    <div class="transcript-grid-actions"><button class="btn ghost" data-action="transcript-formal-print" data-kind="notulen">🖨 Cetak / PDF Notulen</button><button class="btn ghost" data-action="transcript-formal-print" data-kind="risalah">🖨 Cetak / PDF Risalah</button></div>
     <h4>Hasil dari satu teks</h4><p class="hint">Satu kali transkrip disimpan, semua jenis draf dapat dihasilkan tanpa mengetik ulang.</p><div class="transcript-grid-actions"><button class="btn" data-action="transcript-bundle">✦ Buat semua draf sekaligus</button><button class="btn secondary" data-action="transcript-export-bundle">↓ Unduh paket draf TXT</button></div><div class="transcript-results">${[['minutes','Draf notulensi'],['summary','Petikan bahan ringkasan'],['followup','Calon tindak lanjut'],['evidence','Metadata bukti dukung']].map(([id,label])=>`<button class="btn secondary" data-action="transcript-output" data-kind="${id}">${label}</button>`).join('')}</div>
     <div id="transcriptOutput" class="transcript-output" aria-live="polite"></div>
    </section>
@@ -62,7 +138,7 @@
     <div class="field"><label for="transcriptMeeting">Agenda rapat yang sudah ada (opsional)</label><select id="transcriptMeeting"><option value="">Tidak ditautkan</option>${meetingChoices}</select></div>
     <div class="transcript-grid-actions"><button class="btn secondary" data-action="transcript-link" ${readonly?'disabled':''}>↗ Isi bahan agenda</button><button class="btn secondary" data-action="transcript-create-task" ${readonly?'disabled':''}>＋ Draf tugas</button><button class="btn secondary" data-action="transcript-create-evidence" ${readonly?'disabled':''}>＋ Metadata bukti</button></div>
     <p class="hint">Tindakan di atas membutuhkan transkrip tersimpan dan konfirmasi. Tidak ada perubahan otomatis tanpa persetujuan.</p>
-    <h3>Riwayat tersimpan · ${myActiveYear()}</h3><div class="transcript-catalog">${list.length?list.map(r=>`<div class="transcript-record"><strong>${esc(r.title)}</strong><p class="hint">${esc((r.createdAt||'').slice(0,10))} · ${esc(r.classification||'Internal')} · ${Number(r.text?.length||0).toLocaleString('id-ID')} karakter</p><div class="actions"><button class="btn sm ghost" data-action="transcript-load" data-id="${esc(r.id)}">Buka</button><button class="btn sm danger" data-action="transcript-delete" data-id="${esc(r.id)}" ${readonly?'disabled':''}>Hapus</button></div></div>`).join(''):'<p class="hint">Belum ada transkrip tersimpan.</p>'}</div>
+    <h3>Riwayat tersimpan · ${myActiveYear()}</h3><div class="transcript-catalog">${list.length?list.map(r=>`<div class="transcript-record"><strong>${esc(r.title)}</strong><p class="hint">${esc((r.createdAt||'').slice(0,10))} · ${r.verifiedAt?'Sudah diperiksa':'CADANGAN BELUM DIPERIKSA'} · ${esc(r.classification||'Internal')} · ${Number(r.text?.length||0).toLocaleString('id-ID')} karakter</p><div class="actions"><button class="btn sm ghost" data-action="transcript-load" data-id="${esc(r.id)}">Buka</button><button class="btn sm danger" data-action="transcript-delete" data-id="${esc(r.id)}" ${readonly?'disabled':''}>Hapus</button></div></div>`).join(''):'<p class="hint">Belum ada transkrip tersimpan.</p>'}</div>
    </aside>
   </div>`;
  }
@@ -73,6 +149,7 @@
   if(el('transcriptConsent'))draft.consent=el('transcriptConsent').checked;
   if(el('transcriptVerified'))draft.verified=el('transcriptVerified').checked;
   if(el('transcriptMeeting'))draft.meetingId=el('transcriptMeeting').value;
+  for(const key of F.FIELDS){const field=el('formal_'+key);if(field)formalDetails[key]=field.value;}
  }
  function change(e){
   const id=e.target?.id;
@@ -81,12 +158,14 @@
    try{const f=e.target.files[0];U.validateAudio(f);previewAudio(f);status('Rekaman dipilih. Periksa klasifikasi dan centang izin sebelum mengirim.');}
    catch(err){e.target.value='';status(err.message,true);}return true;
   }
+  if(id?.startsWith('formal_')){updateDraftFromUI();return true;}
   if(['transcriptClass','transcriptConsent','transcriptVerified','transcriptMeeting'].includes(id)){updateDraftFromUI();return true;}
   return false;
  }
  function input(e){
+  if(e.target?.id?.startsWith('formal_')){updateDraftFromUI();return true;}
   if(!['transcriptTitle','transcriptText'].includes(e.target?.id))return false;
-  const oldText=draft.text;updateDraftFromUI();if(e.target.id==='transcriptText'&&oldText!==draft.text)draft.verified=false;
+  const oldText=draft.text;updateDraftFromUI();if(e.target.id==='transcriptText'&&oldText!==draft.text){draft.verified=false;scheduleAutosave();}
   const verify=el('transcriptVerified');if(verify&&e.target.id==='transcriptText')verify.checked=false;
   return true;
  }
@@ -137,7 +216,7 @@
    }});
    const session=await recordingPromise;
    if(epoch!==recorderEpoch){session.abort();return;}
-   recorder=session;discardOnStop=false;previewAudio(null);
+   recorder=session;discardOnStop=false;recordClockStart=Date.now();speakerSession=Math.max(0,...speakerMarkers.map(m=>Number(m.session)||0))+1;previewAudio(null);
    liveTimer=setTimeout(()=>{if(recorder===session)stopRecording().catch(e=>status(e.message,true));},10*60*1000);
    status('Audio sedang direkam di perangkat. Memeriksa server teks langsung…');
    const readiness=await readinessPromise;
@@ -186,6 +265,7 @@
   if(draft.classification==='Terbatas')throw Error('Materi Terbatas tidak boleh dikirim ke pengenal suara browser.');
   if(!root.SIPETAK_COMBINED_ENGINE?.supported?.())throw Error('Browser tidak mendukung perekaman dan dikte langsung bersamaan. Gunakan pilihan tambahan Rekam WAV saja atau Dikte saja.');
   if(audioFile&&!confirm('Ada rekaman sebelumnya yang hanya tersimpan sementara di halaman. Pastikan sudah diunduh. Mulai rekaman baru dan ganti file sebelumnya?'))return;
+  recordClockStart=Date.now();speakerSession=Math.max(0,...speakerMarkers.map(m=>Number(m.session)||0))+1;
   const epoch=++combinedEpoch,base=draft.text.trim();
   combinedStarting=true;combinedHadText=false;combinedMuted=false;combinedProblem='';draft.verified=false;
   if(el('transcriptVerified'))el('transcriptVerified').checked=false;
@@ -197,7 +277,7 @@
      if(epoch!==combinedEpoch)return;
      combinedHadText=!!value;indicators(null,combinedHadText?'sedang tertulis':'menunggu ucapan');
      draft.text=[base,value].filter(Boolean).join(base&&value?'\n\n':'').slice(0,U.MAX_TEXT_CHARS);
-     draft.verified=false;
+     draft.verified=false;scheduleAutosave();
      const area=el('transcriptText');if(area){area.value=draft.text;area.scrollTop=area.scrollHeight;}
      if(el('transcriptVerified'))el('transcriptVerified').checked=false;
     },
@@ -217,6 +297,7 @@
        'Rekaman selesai dan teks telah muncul. SIPETAK mencoba mengunduh WAV; pastikan ada di Files. Jika belum, ketuk Unduh WAV. Periksa lalu simpan teks.':
        'Rekaman selesai, tetapi browser belum menghasilkan teks. Pastikan WAV terunduh, lalu periksa audio. Perangkat ini mungkin tidak mendukung dua fungsi bersamaan.');
       tryAutoDownload();
+      if(combinedProblem&&/hampir tidak menangkap suara/i.test(combinedProblem))status(combinedProblem,true);
      }catch(e){status(e?.message||'Audio tidak valid.',true);}
     }
    });
@@ -256,14 +337,14 @@
     catch(e){status(e.message||'Gagal menyelesaikan rekaman.',true);}
    }});
    if(thisEpoch!==recorderEpoch){session.abort();return;}
-   recorder=session;discardOnStop=false;
+   recorder=session;discardOnStop=false;recordClockStart=Date.now();speakerSession=Math.max(0,...speakerMarkers.map(m=>Number(m.session)||0))+1;
    previewAudio(null);
    status(session.mode==='wav'?'Sedang merekam dalam format WAV yang kompatibel dengan iPhone. Tekan Hentikan saat selesai.':'Sedang merekam. Tekan Hentikan saat selesai.');
   }finally{recordStarting=false;}
  }
  function finishedAudio(file,message){
   U.validateAudio(file);
-  previewAudio(file);
+  previewAudio(file);backupTextNow();
   status(message||'Rekaman selesai. Putar audio untuk memastikan terdengar sebelum menekan Ubah rekaman menjadi teks.');
  }
  async function stopRecording(){
@@ -287,7 +368,7 @@
  }
  function updateSpeechText(cycleText){
   const base=[speechBase,speechCommitted,cycleText].filter(Boolean).join(' ').trim();
-  draft.text=base.slice(0,U.MAX_TEXT_CHARS);draft.verified=false;
+  draft.text=base.slice(0,U.MAX_TEXT_CHARS);draft.verified=false;scheduleAutosave();
   const area=el('transcriptText');if(area){area.value=draft.text;area.scrollTop=area.scrollHeight;}
   const box=el('transcriptVerified');if(box)box.checked=false;
  }
@@ -377,8 +458,9 @@
   requireChecked();const recs=records(),current=recs.find(x=>x.id===draft.id),other=recs.filter(x=>x.id!==draft.id);
   if(!current&&recs.length>=30)throw Error('Maksimal 30 transkrip. Unduh dan hapus riwayat lama terlebih dahulu.');
   if(other.reduce((n,x)=>n+String(x.text||'').length,0)+draft.text.length>800000)throw Error('Kapasitas teks brankas transkrip mencapai 800.000 karakter. Arsipkan riwayat lama.');
-  const now=isoNow(),record={id:current?.id||uid('TRS'),title:draft.title,text:draft.text,classification:draft.classification,sourceFilename:draft.filename||current?.sourceFilename||'',performanceYear:current?.performanceYear||myActiveYear(),createdAt:current?.createdAt||now,verifiedAt:now,updatedAt:now,classificationNote:'Draf, belum disahkan'};
+  const now=isoNow(),record={id:current?.id||uid('TRS'),title:draft.title,text:draft.text,classification:draft.classification,sourceFilename:draft.filename||current?.sourceFilename||'',performanceYear:current?.performanceYear||myActiveYear(),createdAt:current?.createdAt||now,verifiedAt:now,updatedAt:now,classificationNote:'Draf, belum disahkan',formalDetails:F.meta(formalDetails),speakerMarkers:F.sanitizeMarkers(speakerMarkers)};
   if(current)Object.assign(current,record);else recs.push(record);
+  if(autosaveTimer){clearTimeout(autosaveTimer);autosaveTimer=null;}
   await queueSave();draft.id=record.id;render();showBundle();toast('Transkrip tersimpan terenkripsi. Paket draf otomatis tersedia. Audio tidak disimpan.');
  }
  async function process(){
@@ -403,14 +485,14 @@
    if(!response.ok)throw Error(String(result.error||'Gagal mentranskripsikan audio.').slice(0,240));
    if(typeof result.text!=='string')throw Error('Server tidak mengembalikan teks.');
    const next=U.validateText(result.text);
-   draft.text=(draft.text?draft.text.trim()+'\n\n':'')+next;draft.verified=false;
+   draft.text=(draft.text?draft.text.trim()+'\n\n':'')+next;draft.verified=false;scheduleAutosave(1500);
    if(draft.text.length>U.MAX_TEXT_CHARS)throw Error('Hasil gabungan terlalu panjang. Simpan rekaman terpisah.');
    const area=el('transcriptText');if(area)area.value=draft.text;
    const box=el('transcriptVerified');if(box)box.checked=false;
    status('Berhasil. Periksa ejaan, nama, dan angka sebelum menyimpan.');
   }finally{working=false;controller=null;}
  }
- function requireStored(){requireChecked();const record=records().find(x=>x.id===draft.id);if(!record||record.text!==draft.text||record.title!==draft.title)throw Error('Simpan versi transkrip yang sudah diperiksa terlebih dahulu.');return record;}
+ function requireStored(){requireChecked();const record=records().find(x=>x.id===draft.id);if(!record||!record.verifiedAt||record.text!==draft.text||record.title!==draft.title)throw Error('Simpan versi transkrip yang sudah diperiksa terlebih dahulu.');return record;}
  async function linkMeeting(){
   const record=requireStored(),id=draft.meetingId||el('transcriptMeeting')?.value;
   const target=myItems('meetings').find(x=>x.id===id);
@@ -443,35 +525,50 @@
   await queueSave();render();toast('Metadata bukti tersimpan, belum menjadi dokumen resmi.');
  }
  function clearDraft(){
+  if(combinedHandle||combinedStarting||recorder||recordStarting||dictationWanted||liveHandle)throw Error('Tekan Hentikan dan unduh WAV sebelum membuat transkrip baru.');
+  if(audioFile&&!audioDownloadAttempted&&!confirm('Audio masih sementara dan belum diunduh. Buat transkrip baru akan menghilangkan rekaman. Tetap lanjut?'))return;
   if(working)throw Error('Batalkan transkripsi yang berjalan terlebih dahulu.');stopAll();stopDictation();previewAudio(null);
-  draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};render();
+  draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};formalDetails=emptyFormal();speakerMarkers=[];speakerSession=0;recordClockStart=0;render();
  }
- function load(id){const row=records().find(x=>x.id===id);if(!row)throw Error('Transkrip tidak ditemukan.');stopAll();previewAudio(null);
-  draft={title:row.title,text:row.text,classification:row.classification||'Internal',verified:true,consent:false,meetingId:'',id:row.id,filename:row.sourceFilename||''};render();status('Transkrip tersimpan dibuka. Perubahan baru harus diperiksa lagi sebelum disimpan.');
+ function load(id){const row=records().find(x=>x.id===id);if(!row)throw Error('Transkrip tidak ditemukan.');
+  if(combinedHandle||combinedStarting||recorder||recordStarting||dictationWanted||liveHandle)throw Error('Hentikan rekaman dan unduh WAV sebelum membuka riwayat.');
+  if(audioFile&&!audioDownloadAttempted&&!confirm('Audio masih sementara dan belum diunduh. Membuka riwayat akan menghilangkan rekaman. Tetap lanjut?'))return;
+  stopAll();previewAudio(null);
+  draft={title:row.title,text:row.text,classification:row.classification||'Internal',verified:!!row.verifiedAt,consent:false,meetingId:'',id:row.id,filename:row.sourceFilename||''};formalDetails={...emptyFormal(),...F.meta(row.formalDetails||{})};speakerMarkers=F.sanitizeMarkers(row.speakerMarkers||[]);speakerSession=0;recordClockStart=0;render();status('Transkrip tersimpan dibuka. Perubahan baru harus diperiksa lagi sebelum disimpan.');
  }
  async function remove(id){if(myYearArchived())throw Error('Tahun diarsipkan.');const idx=records().findIndex(x=>x.id===id);if(idx<0)throw Error('Transkrip tidak ditemukan.');if(!confirm('Hapus transkrip dari riwayat? Salinan yang sudah ditautkan ke agenda atau dibuat sebagai metadata/tugas TIDAK ikut dihapus. Unduh TXT bila dibutuhkan.'))return;
-  data.transcriptions.splice(idx,1);await queueSave();if(draft.id===id){draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};}render();toast('Transkrip dihapus dari brankas lokal.');
+  data.transcriptions.splice(idx,1);await queueSave();if(draft.id===id){draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};formalDetails=emptyFormal();speakerMarkers=[];speakerSession=0;recordClockStart=0;}render();toast('Transkrip dihapus dari brankas lokal.');
  }
  function downloadText(){updateDraftFromUI();const text=U.validateText(draft.text);blobDownload('SIPETAK-Transkrip-'+today()+'.txt',text,'text/plain;charset=utf-8');}
- function bundleText(){updateDraftFromUI();const all=U.outputs(draft.title,draft.text,today());return [all.minutes,all.summary,all.followup,all.evidence].join('\n\n'+'='.repeat(45)+'\n\n');}
+ function bundleText(){updateDraftFromUI();const all=U.outputs(draft.title,draft.text,today());return [F.makeText('notulen',formalOptions()),F.makeText('risalah',formalOptions()),all.summary,all.followup,all.evidence].join('\n\n'+'='.repeat(45)+'\n\n');}
  function showBundle(){showText(bundleText());}
  function exportBundle(){const content=bundleText();blobDownload('SIPETAK-Paket-Draf-'+today()+'.txt',content,'text/plain;charset=utf-8');}
  function showOutput(which){updateDraftFromUI();const content=U.outputs(draft.title,draft.text,today())[which];if(!content)throw Error('Jenis draf tidak dikenal.');
   showText(content);
  }
+ function showFormal(which){if(!F)throw Error('Paket dokumen resmi belum dimuat; muat ulang SIPETAK.');const content=F.makeText(which,formalOptions());showText(content);status((which==='notulen'?'Notulen':'Risalah')+' konsep dibuat dari transkrip. Lengkapi identitas dan verifikasi sebelum digunakan.');}
+ function exportFormalWord(which){const options=formalOptions(),html=F.makeHtml(which,options),name=F.filename(which,options.title);blobDownload(name+'.doc','\ufeff'+html,'application/msword;charset=utf-8');status('Dokumen Word konsep diunduh. Periksa dan sesuaikan tata naskah sebelum pengesahan.');}
+ function printFormal(which){const html=F.makeHtml(which,formalOptions());const popup=window.open('about:blank','_blank');if(!popup)throw Error('Browser memblokir tab cetak. Izinkan pop-up SIPETAK lalu coba lagi.');popup.document.open();popup.document.write(html);popup.document.close();popup.focus();popup.setTimeout(()=>popup.print(),350);status('Pratinjau cetak dibuka. Pilih Simpan sebagai PDF pada dialog cetak browser.');}
  function showText(content){const parent=el('transcriptOutput');if(!parent)return;
   parent.innerHTML=`<div class="field"><label for="transcriptOutputText">Pratinjau hasil (draf)</label><textarea readonly id="transcriptOutputText">${esc(content)}</textarea></div><button type="button" class="btn ghost" data-action="transcript-copy-output">Salin draf</button>`;
  }
  async function copyOutput(){const val=el('transcriptOutputText')?.value||'';if(!val)throw Error('Buka hasil draf dahulu.');await navigator.clipboard.writeText(val);status('Draf berhasil disalin. Verifikasi sebelum digunakan.');}
  function cancel(){if(controller)controller.abort();controller=null;working=false;status('Proses dibatalkan. Rekaman tetap lokal pada halaman ini.');}
- function stopAll(){clearTimeout(liveTimer);liveTimer=null;combinedEpoch++;combinedHandle?.abort();combinedHandle=null;combinedStarting=false;combinedStopping=false;recorderEpoch++;liveHandle?.abort();liveHandle=null;liveStarting=false;liveConnected=false;markLiveEditing(false);if(controller)controller.abort();controller=null;working=false;stopDictation();discardOnStop=true;recorder?.abort();recorder=null;recordStopping=false;}
- function leave(){stopAll();}
- function secureLock(){discardOnStop=true;stopAll();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=null;draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};}
+ function stopAll(){if(autosaveTimer){clearTimeout(autosaveTimer);autosaveTimer=null;}clearTimeout(liveTimer);liveTimer=null;combinedEpoch++;combinedHandle?.abort();combinedHandle=null;combinedStarting=false;combinedStopping=false;recorderEpoch++;liveHandle?.abort();liveHandle=null;liveStarting=false;liveConnected=false;markLiveEditing(false);if(controller)controller.abort();controller=null;working=false;stopDictation();discardOnStop=true;recorder?.abort();recorder=null;recordStopping=false;}
+ function leave(){
+  if(combinedHandle||combinedStarting||recorder||recordStarting||liveHandle||dictationWanted){
+   if(!confirm('Rekaman/dikte masih berjalan. Keluar sekarang dapat menghilangkan audio yang belum diunduh. Hentikan dan unduh dulu. Tetap keluar?'))return false;
+  }
+  if(audioFile&&!audioDownloadAttempted&&!confirm('File audio belum diunduh. Keluar akan menghilangkan audio dari halaman. Tetap keluar?'))return false;
+  backupTextNow();stopAll();return true;
+ }
+ function secureLock(){backupTextNow();discardOnStop=true;stopAll();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=null;draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};formalDetails=emptyFormal();speakerMarkers=[];speakerSession=0;recordClockStart=0;}
  function action(button){const a=button?.dataset?.action||'';if(!a.startsWith('transcript-'))return false;
-  const actions={'transcript-combined':startCombined,'transcript-live':startLive,'transcript-service-check':checkServerStatus,'transcript-record':()=>startRecording(false),'transcript-record-wav':()=>startRecording(true),'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
+  const actions={'transcript-combined':startCombined,'transcript-live':startLive,'transcript-service-check':checkServerStatus,'transcript-record':()=>startRecording(false),'transcript-record-wav':()=>startRecording(true),'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-marker':()=>addSpeakerMarker(button.dataset.speaker),'transcript-marker-custom':()=>addSpeakerMarker(el('transcriptCustomSpeaker')?.value),'transcript-marker-time':()=>addSpeakerMarker('Penanda waktu'),'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-formal-preview':()=>showFormal(button.dataset.kind),'transcript-formal-word':()=>exportFormalWord(button.dataset.kind),'transcript-formal-print':()=>printFormal(button.dataset.kind),'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
   // Execute immediately within the real tap/click gesture (important for iOS microphone/Web Audio permissions).
   try{Promise.resolve(actions[a]?.()).catch(e=>{if(e.name==='AbortError')status('Permintaan dibatalkan.');else status(e.message||'Operasi gagal.',true);});}
   catch(e){status(e.message||'Operasi gagal.',true);}return true;
  }
+ root.addEventListener?.('beforeunload',event=>{if(combinedHandle||combinedStarting||recorder||recordStarting||liveHandle||(audioFile&&!audioDownloadAttempted)){event.preventDefault?.();event.returnValue='';}});
  root.SIPETAK_TRANSCRIPT={page,action,change,input,stopAll,leave,secureLock,records,outputs:U.outputs};
 })(window);

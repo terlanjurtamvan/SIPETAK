@@ -30,7 +30,7 @@ function setup({classification='Internal',consent=true,support=true}={}){
  };
  if(support)c.webkitSpeechRecognition=BrowserSpeech;
  c.window=c;vm.createContext(c);
- for(const name of ['quick-entry.js','modules/transcription/transcription-utils.js','modules/transcription/transcription.js'])vm.runInContext(readFileSync(name,'utf8'),c,{filename:name});
+ for(const name of ['quick-entry.js','modules/transcription/transcription-utils.js','modules/transcription/formal-documents.js','modules/transcription/transcription.js'])vm.runInContext(readFileSync(name,'utf8'),c,{filename:name});
  return {c,dat,nodes,buttons,instances,saves:()=>saves};
 }
 const action=(c,name)=>c.SIPETAK_TRANSCRIPT.action({dataset:{action:name}});
