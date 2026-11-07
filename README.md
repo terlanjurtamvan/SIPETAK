@@ -1,3 +1,9 @@
+## v3.12.5-rc1 — Panduan penggunaan sampai print/PDF (7 November 2026)
+
+Panduan 8 langkah ditambahkan langsung di **Transkripsi Suara** (panel 📘 yang dapat dibuka/tutup), dan di menu **Panduan Penggunaan** (cari “rekam”, “notulen”, “risalah”, atau “cetak”). Di dekat tombol **Cetak / PDF Notulen/Risalah** terdapat instruksi printer/PDF serta solusi ketika pop-up diblokir. Panduan cetak rinci tersedia di [docs/PANDUAN-TRANSKRIPSI-SAMPAI-CETAK-3.12.5.md](docs/PANDUAN-TRANSKRIPSI-SAMPAI-CETAK-3.12.5.md).
+
+**Tidak ada perubahan pada mesin rekaman, backend, kunci API, Supabase, atau format brankas.** Kandidat uji staging; cek hasil PDF serta output mesin sebelum produksi.
+
 ## Update v3.12.4-rc1 — Kejelasan alur rekaman (7 November 2026)
 
 Perbaikan berdasarkan tangkapan layar: kotak izin harus dicentang secara sadar sebelum merekam, tombol Hentikan dan penanda pembicara tidak aktif saat idle, panduan langkah tampil dekat tombol mulai, dan tag PWA standar untuk peringatan Console Chrome. Mesin WAV + transkripsi browser dan keamanan data tidak diubah.
