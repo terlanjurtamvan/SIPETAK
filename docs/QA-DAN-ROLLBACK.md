@@ -37,3 +37,16 @@
 ## Batas proyek
 
 Refaktor dilakukan **secara bertahap** dan aman: modul transkripsi menjadi folder terpisah, tes/CI/dokumentasi ditambah, kode inti aplikasi lama tetap. Pemecahan total `app.js`, `workflow.js`, `ai-assistant.js` belum dilakukan karena berisiko migrasi yang merusak data bila tanpa pengujian produksi. Paket ini adalah release candidate, bukan sertifikasi produksi.
+
+## Uji khusus iPhone untuk v3.9.1-rc2
+
+1. Pastikan `_headers` aktif dengan `media-src 'self' blob:` pada domain SIPETAK, bukan hanya di repositori.
+2. Perbarui PWA/service worker; tutup aplikasi sepenuhnya, buka lagi dan cek versi pada footer.
+3. Buka menu Transkripsi di Safari; beri izin mikrofon; rekam contoh 10–15 detik lalu Hentikan.
+4. Pastikan pratinjau WAV dapat diputar; ketuk **unduh rekaman** sebagai cadangan.
+5. Coba tombol **Ubah rekaman menjadi teks** hanya bila endpoint Cloudflare dan API key telah diaktifkan; kalau tidak, cek pesan error server.
+6. Uji unggah file dari Memo Suara dan pastikan hasilnya dapat diputar.
+7. Uji menutup/mengunci brankas saat sedang merekam; indikator mikrofon harus padam dan audio mentah tidak tersimpan otomatis.
+8. Jangan terapkan ke produksi sampai semua langkah lulus pada iPhone nyata, termasuk restore backup dan tes sinkronisasi.
+
+Jika audio masih gagal, catat versi iOS, jenis browser/PWA, nama/ukuran berkas, dan pesan status transkripsi; kirim tanpa konten audio sensitif.

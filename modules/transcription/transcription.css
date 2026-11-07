@@ -18,8 +18,14 @@
 .transcript-record .actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 @media (max-width:900px){.transcript-pane{grid-template-columns:1fr}.transcript-results{grid-template-columns:1fr}}
 
-/* Feedback is adjacent to record controls: visible without scrolling on mobile. */
-.transcript-record-indicator{font-weight:700;margin:4px 0 5px;color:#536276}
-.transcript-record-indicator[data-state="recording"]{color:#b91c1c}
-.transcript-record-indicator[data-state="pending"]{color:#945d0a}
-.transcript-card .transcript-status{display:block;margin:3px 0 10px;line-height:1.45}
+.transcript-audio-error{color:#b73b32;font-weight:600;line-height:1.5;padding:10px 0;}
+.transcript-card audio{display:block;}
+.transcript-card .hint a{overflow-wrap:anywhere;}
+
+/* Live speech-to-text UI: visible recording state and evolving draft text. */
+.transcript-live-start{font-weight:700;min-height:48px;flex:1 1 230px;white-space:normal;text-align:center}
+.transcript-live-banner{padding:12px;border-radius:10px;margin:11px 0;background:var(--surface-alt,rgba(95,126,155,.09));border:1px solid var(--border,rgba(120,120,120,.20));line-height:1.5;font-weight:600}
+.transcript-live-banner.is-live{border-color:#ba4a45;background:rgba(214,62,68,.075)}
+.transcript-live-banner.is-live::before{content:'● ';color:#cf2635}
+#transcriptText[readonly]{background:var(--surface-alt,rgba(95,126,155,.04));border:2px solid #7c72d0;min-height:260px}
+@media(max-width:600px){.transcript-live-start{width:100%}.transcript-grid-actions .btn{min-height:44px}}

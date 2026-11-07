@@ -30,9 +30,6 @@ test('module renders a navigation page without unescaped title and stores editab
  const html=ctx.SIPETAK_TRANSCRIPT.page();
  assert.match(html,/Transkripsi Suara & Notulensi/);
  assert.match(html,/Ubah rekaman menjadi teks/);
- assert.match(html,/id="transcriptRecordIndicator"/);
- assert.ok(html.indexOf('id="transcriptStatus"')<html.indexOf('id="transcriptPreview"'),'recording status must appear above preview and consent');
- assert.equal((html.match(/id="transcriptStatus"/g)||[]).length,1,'avoid duplicate status targets');
  assert.ok(!html.includes('<script>'));assert.ok(html.includes('Unggah rekaman'));
  assert.equal(ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-save'}}),true);
  await tick();
@@ -61,5 +58,26 @@ test('UI preview safely escapes user text instead of inserting as executable HTM
  await tick();
  assert.match(controls.transcriptOutput.innerHTML,/&lt;script&gt;/);
  assert.ok(!controls.transcriptOutput.innerHTML.includes('<script>'));
+ ctx.SIPETAK_TRANSCRIPT.secureLock();
+});
+test('one tap starts WAV recording and live text in the same draft without auto saving',async()=>{
+ const {ctx,controls,data,getSaves}=build();
+ controls.transcriptConsent.checked=true;ctx.navigator.onLine=true;
+ let recorderStopped=false,streamSeen=false;
+ ctx.SIPETAK_SB_AI_TOKEN=async()=> 'b'.repeat(40);
+ ctx.SIPETAK_RECORDER={start:async()=>({mode:'wav',stream:{getAudioTracks:()=>[{kind:'audio'}]},stop:async()=>{recorderStopped=true;return new ctx.File([new Uint8Array(512)],'rekaman-test.wav',{type:'audio/wav'});},abort:()=>{}})};
+ ctx.SIPETAK_LIVE_ENGINE={create:({onText})=>({
+  connect:async({stream,classification})=>{streamSeen=stream.getAudioTracks().length===1&&classification==='Internal';onText('Rapat sudah dimulai');},
+  stop:async()=>'',abort:()=>{}
+ })};
+ assert.match(ctx.SIPETAK_TRANSCRIPT.page(),/Mulai Rekam \+ Teks Langsung/);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-live'}});await new Promise(r=>setTimeout(r,25));
+ assert.equal(streamSeen,true);
+ assert.match(controls.transcriptText.value,/Rapat sudah dimulai/);
+ assert.equal(getSaves(),0,'Live text must not silently be saved to the vault');
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-stop'}});
+ await new Promise(r=>setTimeout(r,35));
+ assert.equal(recorderStopped,true);
+ assert.equal(data.transcriptions.length,0,'Still needs verification and explicit save');
  ctx.SIPETAK_TRANSCRIPT.secureLock();
 });

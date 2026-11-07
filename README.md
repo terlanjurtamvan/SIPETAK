@@ -1,4 +1,4 @@
-# SIPETAK Pribadi — v3.9.1-rc2
+# SIPETAK Pribadi — v3.10.0-rc1
 
 **Status: RELEASE CANDIDATE / STAGING — BELUM DINYATAKAN SIAP PRODUKSI.**
 
@@ -8,7 +8,7 @@ Aplikasi web/PWA offline-first untuk pekerjaan Sekretariat DPRD Kabupaten Kapuas
 
 1. Buka SIPETAK melalui HTTPS, buat/buka **brankas pribadi**.
 2. Buka **Transkripsi Suara** dari menu. Ketik nama kegiatan dan pilih klasifikasi.
-3. Gunakan **Unggah rekaman**, atau **Mulai rekam → Izinkan mikrofon → Hentikan**. Saat merekam terlihat hitungan waktu; setelah dihentikan muncul pemutar audio serta tautan unduh sementara. Pilihan lain: **Ketik saat bicara** jika browser mendukung pengenalan suara (butuh izin dan hanya untuk klasifikasi Umum).
+3. Gunakan **Unggah rekaman**, atau **Mulai rekam → Hentikan**. Pilihan lain: **Ketik saat bicara** jika browser mendukung pengenalan suara (butuh izin dan hanya untuk klasifikasi Umum).
 4. Untuk mengubah audio menjadi teks: pastikan ada izin merekam/pemrosesan, centang pernyataan persetujuan, login ke **Supabase**, lalu tekan **Ubah rekaman menjadi teks**. Cloudflare Pages harus dikonfigurasi oleh pengelola.
 5. **Baca & koreksi** transkripsi, lalu centang pemeriksaan dan tekan **Simpan teks terenkripsi**. Rekaman mentah tidak disimpan dalam brankas.
 6. Gunakan hasil **Draf notulensi**, **Petikan bahan ringkasan**, **Calon tindak lanjut**, dan **Metadata bukti dukung**. Opsional: hubungkan ke agenda yang sudah ada atau buat satu tugas pemrosesan draf.
@@ -22,6 +22,7 @@ Jika API belum diaktifkan, kolom teks tetap bisa digunakan secara **manual** dan
 - `workflow.js`, `skp-planner.js`, `supabase-sync.js`, `ai-assistant.js`: fitur lama dipertahankan.
 - `modules/transcription/transcription-utils.js`: fungsi murni, dapat diuji tanpa browser.
 - `modules/transcription/transcription.js`: antarmuka dan integrasi tugas/persidangan/brankas.
+- `modules/transcription/recording-engine.js`: perekaman MediaRecorder tanpa *timeslice* dan WAV 16 kHz untuk iPhone, tanpa menyimpan audio ke brankas.
 - `modules/transcription/transcription.css`: gaya modul terisolasi.
 - `functions/api/transcribe.js`: autentikasi Supabase, validasi unggah, kuota D1, dan penyedia transkripsi.
 - `cloudflare/transcription-quota.sql`: tabel kuota.
@@ -62,10 +63,16 @@ Yang wajib disiapkan pengelola di lingkungan **staging**:
 
 Pengujian di repositori ini memakai Node dan mock backend; belum ada bukti keberhasilan transaksi OpenAI nyata, binding Cloudflare D1 produksi, Safari iPhone PWA, pengambilan mikrofon pada perangkat nyata, atau pemulihan brankas pengguna di server sebenarnya. Jangan menganggap CI hijau sebagai persetujuan produksi. Lihat [docs/QA-DAN-ROLLBACK.md](docs/QA-DAN-ROLLBACK.md).
 
-## Perbaikan perekaman v3.9.1-rc2
+## Catatan perbaikan suara 3.9.1-rc2 (iPhone)
 
-Permintaan mikrofon sekarang dipicu langsung dari klik pengguna, menampilkan status izin/merekam beserta durasi, menangani penolakan/konflik perangkat dengan pesan bahasa Indonesia, dan menyediakan unduh audio sebelum menutup halaman. Tes dengan Safari iPhone asli tetap wajib. Pembaruan ini tidak mengaktifkan transkripsi server tanpa secret/binding Cloudflare.
+- Header CSP sebelumnya mengizinkan `blob:` untuk gambar tetapi **tidak untuk audio**, sehingga pemutar rekaman lokal dapat menampilkan *Kesalahan*. `_headers` kini mencantumkan `media-src 'self' blob:`. Ini **tidak** memberi izin ke domain media eksternal.
+- iPhone memilih perekaman mono WAV 16 kHz agar lebih kompatibel; pengguna lain tetap menggunakan format terbaik yang didukung `MediaRecorder`. Tombol **Rekam kompatibel (WAV)** tersedia sebagai alternatif manual.
+- Pada `MediaRecorder` digunakan `start()` tanpa `timeslice=1000`, sehingga mengurangi masalah pemutaran MP4 di beberapa versi Safari.
+- Rekaman hanya berada pada memori halaman. Untuk menyimpannya di perangkat, tekan **unduh rekaman** sebelum menutup atau mengunci SIPETAK. Rekaman lama yang terlanjur gagal belum bisa dipulihkan tanpa berkas aslinya.
+- Mode WAV berukuran lebih besar dan berhenti pada batas unggah 20 MB (sekitar 10 menit pada 16 kHz mono). Untuk rapat panjang, gunakan Memo Suara lalu unggah hasilnya.
+- Perbarui *service worker* dan muat ulang aplikasi setelah deploy. Uji dengan rekaman tanpa informasi rahasia sebelum menggunakan audio rapat dinas.
 
 
-### Perbaikan perekaman v3.9.2-rc3
-Status mikrofon sekarang tepat di bawah tombol rekam, dengan indikator Menunggu izin / Mikrofon aktif. Pesan kesalahan pemutar audio tidak lagi tersembunyi di bawah tombol transkripsi. Jika tombol tidak bereaksi di aplikasi online, periksa versi footer, status izin Safari, dan pastikan deploy file baru plus service worker baru berhasil. Jangan menghapus aplikasi iPhone tanpa cadangan brankas: ini bisa menghapus penyimpanan lokal.
+## Rekam + teks langsung (v3.10.0-rc1)
+
+Mode utama: rekam audio WAV lokal sekaligus transkripsi live gpt-live-transcribe via WebRTC. Aktifkan Cloudflare Pages function `/api/transcribe-live` dengan secret OPENAI_API_KEY, D1 TRANSCRIBE_DB, serta `TRANSCRIBE_LIVE_ENABLED=true`. Sistem memerlukan Supabase login, persetujuan, klasifikasi Umum atau Internal, koneksi HTTPS, dan izin mikrofon. Transkrip disimpan terenkripsi hanya setelah koreksi/konfirmasi pengguna. Klasifikasi Terbatas tidak dikirim ke layanan eksternal. Sesinya dibatasi pada pengguna melalui kuota D1, tetapi durasi/billing server-side harus dimonitor sebelum rilis produksi. Teks dapat muncul tertunda dan bagian yang masih sementara dapat berubah; uji Safari iPhone nyata wajib sebelum deploy utama.

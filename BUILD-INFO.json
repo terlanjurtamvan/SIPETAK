@@ -1,5 +1,5 @@
 {
-  "version": "3.9.2-rc3",
+  "version": "3.10.0-rc1",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -18,7 +18,10 @@
     "field usability test with real Sekretariat DPRD workflows",
     "actual OpenAI transcription API call",
     "Cloudflare D1 quota binding production",
-    "microphone permission and MediaRecorder on real iPhone"
+    "microphone permission and MediaRecorder on real iPhone",
+    "iPhone real microphone playback after release 3.9.1-rc2",
+    "real OpenAI WebRTC live session",
+    "iPhone Safari realtime WebRTC and WAV recording simultaneously"
   ],
   "cloud_data_format": "sipetak-vault-v1 (AES-256-GCM encrypted JSON envelope)",
   "note": "Supabase URL and publishable key centralized in index.html; cloud onboarding for new device",
@@ -41,7 +44,13 @@
     "rekam-mikrofon",
     "dikte-browser-opsional",
     "transkrip-vault",
-    "draf-notulensi-tugas-bukti"
+    "draf-notulensi-tugas-bukti",
+    "safari-csp-blob-media-playback",
+    "ios-wav-compatible-recording",
+    "recording-troubleshooting-and-download",
+    "webrtc-live-transcription",
+    "safari-live-text-with-local-wav-recording",
+    "realtime-transcription-event-deltas"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
@@ -51,5 +60,6 @@
   ],
   "deployment_status": "staging-not-production-verified",
   "transcription_backend": "Cloudflare Pages Function /api/transcribe; requires OPENAI_API_KEY + D1 TRANSCRIBE_DB + TRANSCRIBE_ENABLED=true",
-  "notes": "Perbaikan perekaman: langsung saat klik, status izin, durasi, pesan error iPhone, penanganan MediaRecorder dan pembatalan; belum diuji perangkat nyata."
+  "notes": "Fix iPhone Safari: CSP media-src blob:, MediaRecorder without timeslice, WAV 16 kHz compatibility mode, actionable playback errors; no cloud schema change.",
+  "transcription_live_backend": "Cloudflare Pages /api/transcribe-live; OPENAI_API_KEY + TRANSCRIBE_DB + TRANSCRIBE_LIVE_ENABLED=true"
 }
