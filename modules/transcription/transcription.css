@@ -65,3 +65,9 @@
 .transcript-marker-list{font-size:.92rem;max-height:140px;overflow-y:auto;padding:8px 0}
 .transcript-marker-line{padding:5px 4px;border-bottom:1px solid var(--border,rgba(120,120,120,.18));overflow-wrap:anywhere}
 @media(max-width:500px){.transcript-speaker-custom .btn{width:100%}}
+
+/* v3.12.4: idle/consent clarity */
+.transcript-start-help{padding:10px 12px;border-radius:9px;line-height:1.5;background:var(--surface-alt,rgba(95,126,155,.09));border-left:3px solid var(--accent,#6252d7);font-size:.92rem;margin:10px 0}
+.transcript-prompt.needs-attention{outline:2px solid #bf7b25;outline-offset:3px}
+.transcript-speaker-panel .btn:disabled,.transcript-speaker-custom input:disabled{opacity:.5;cursor:not-allowed}
+.transcript-primary-actions .btn:disabled{opacity:.55;cursor:not-allowed}
