@@ -1,4 +1,4 @@
-# Checklist QA, rilis, pemulihan SIPETAK v3.9.0-rc1
+# Checklist QA, rilis, pemulihan SIPETAK v3.9.1-rc2
 
 ## Uji yang telah dijalankan dalam pembuatan paket
 

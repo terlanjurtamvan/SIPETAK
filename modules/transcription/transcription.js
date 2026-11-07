@@ -6,12 +6,13 @@
  let draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};
  let audioFile=null,audioUrl='',recorder=null,micStream=null,working=false,controller=null;
  let recognition=null,speechBase='',speechResults=[],discardOnStop=false;
+ let recordingPending=false,recordingRequestId=0,recordingTimer=null,recordingStartedAt=0;
  const el=id=>document.getElementById(id);
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function status(message,isError=false){const x=el('transcriptStatus');if(x){x.textContent=message;x.style.color=isError?'#b73b32':'';}else if(isError&&typeof toast==='function')toast(message,true);}
  function available(){return !!data&&!!vaultKey;}
  function records(){if(!available())return [];if(!Array.isArray(data.transcriptions))data.transcriptions=[];return data.transcriptions;}
- function previewAudio(file){if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=file;if(file){audioUrl=URL.createObjectURL(file);draft.filename=file.name;}const mount=el('transcriptPreview');if(mount)mount.innerHTML=file?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(file.name)} (${fmtBytes(file.size)}) · Audio tidak disimpan di brankas.</p>`:'';}
+ function previewAudio(file){if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=file;if(file){audioUrl=URL.createObjectURL(file);draft.filename=file.name;}const mount=el('transcriptPreview');if(mount){mount.innerHTML=file?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(file.name)} (${fmtBytes(file.size)}) · Audio hanya disimpan sementara di halaman. <a href="${esc(audioUrl)}" download="${esc(file.name)}">Unduh rekaman sebelum menutup halaman</a>.</p>`:'';const audio=mount.querySelector?.('audio');audio?.addEventListener?.('error',()=>status('File audio terbentuk tetapi tidak bisa diputar oleh browser ini. Unduh rekaman sebelum menutup halaman; coba buka lewat aplikasi File/Voice Memos, atau rekam dengan aplikasi bawaan lalu unggah ke SIPETAK.',true),{once:true});}}
  function readyOutputs(){try{return U.outputs(draft.title,draft.text,today());}catch{return null;}}
  function page(){
   if(!available())return '<section class="card">Brankas harus dibuka dahulu.</section>';
@@ -24,11 +25,13 @@
     <div class="field"><label for="transcriptTitle">Nama kegiatan / agenda</label><input id="transcriptTitle" maxlength="160" placeholder="Contoh: Rapat pembahasan Raperda" value="${esc(draft.title)}" ${readonly?'disabled':''}></div>
     <div class="field"><label for="transcriptClass">Klasifikasi rekaman</label><select id="transcriptClass" ${readonly?'disabled':''}>${allowedClass.map(x=>`<option ${x===draft.classification?'selected':''}>${x}</option>`).join('')}</select><p class="hint">Klasifikasi Terbatas tidak boleh dikirim ke layanan transkripsi eksternal.</p></div>
     <div class="field"><label for="transcriptFile">Unggah rekaman (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
-    <div class="transcript-grid-actions"><button class="btn secondary" data-action="transcript-record" ${readonly?'disabled':''}>● Mulai rekam</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button><button class="btn secondary" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Ketik saat bicara (opsional)</button></div>
+    <div class="transcript-grid-actions"><button type="button" class="btn secondary" data-action="transcript-record" aria-pressed="false" ${readonly?'disabled':''}>● Mulai rekam</button><button type="button" class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button><button type="button" class="btn secondary" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Ketik saat bicara (opsional)</button></div>
+    <p id="transcriptRecordIndicator" class="transcript-record-indicator" aria-live="polite">Mikrofon belum aktif</p>
+    <p class="transcript-status" id="transcriptStatus" role="status" aria-live="polite">Tekan Mulai rekam, lalu izinkan akses mikrofon bila diminta.</p>
+    <p class="hint">Langkah: Mulai rekam → izinkan mikrofon → berbicara → Hentikan → dengarkan hasil → Ubah rekaman menjadi teks. Teks tidak muncul selama mode rekam biasa.</p>
     <div id="transcriptPreview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)})</p>`:''}</div>
     <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya sudah memperoleh izin perekaman dan memastikan konten ini boleh diproses oleh layanan pengenal suara sesuai aturan instansi.</label>
     <div class="transcript-grid-actions"><button class="btn" data-action="transcript-process" ${readonly?'disabled':''}>✦ Ubah rekaman menjadi teks</button><button class="btn ghost" data-action="transcript-cancel" >Batal proses</button></div>
-    <p class="transcript-status" id="transcriptStatus" role="status" aria-live="polite"></p>
     <div class="field"><label for="transcriptText">Hasil ketik otomatis — koreksi di sini</label><textarea id="transcriptText" maxlength="80000" placeholder="Hasil rekaman akan muncul di sini. Anda juga boleh menempel hasil dari perangkat lain atau mengetik manual." ${readonly?'disabled':''}>${esc(draft.text)}</textarea><p class="hint">${draft.text.length.toLocaleString('id-ID')} karakter. Periksa nama, angka, kutipan, dan keputusan secara manual.</p></div>
     <label class="transcript-prompt"><input type="checkbox" id="transcriptVerified" ${draft.verified?'checked':''} ${readonly?'disabled':''}> Saya sudah membaca dan mengoreksi teks di atas. Simpan sebagai <b>draf pribadi</b>, bukan dokumen resmi.</label>
     <div class="transcript-grid-actions"><button class="btn" data-action="transcript-save" ${readonly?'disabled':''}>✓ Simpan teks terenkripsi</button><button class="btn secondary" data-action="transcript-new">＋ Transkrip baru</button><button class="btn ghost" data-action="transcript-export">↓ Unduh TXT</button></div>
@@ -69,29 +72,69 @@
   return true;
  }
  function mimeChoice(){
+  // Let Safari select its native format when a declared preference is unsupported.
   const options=['audio/mp4','audio/webm;codecs=opus','audio/webm'];
   return options.find(v=>root.MediaRecorder?.isTypeSupported?.(v))||'';
  }
- async function startRecording(){
-  if(recorder?.state==='recording')throw Error('Rekaman sudah berlangsung.');
-  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!root.MediaRecorder)throw Error('Perekaman memerlukan browser HTTPS dengan akses mikrofon. Gunakan unggah rekaman sebagai alternatif.');
-  stopDictation();micStream=await navigator.mediaDevices.getUserMedia({audio:true});
-  const mimeType=mimeChoice();
-  try{recorder=new MediaRecorder(micStream,mimeType?{mimeType}:undefined);}
-  catch(e){micStream.getTracks().forEach(t=>t.stop());micStream=null;throw e;}
-  discardOnStop=false;const chunks=[];recorder.addEventListener('dataavailable',e=>{if(e.data?.size)chunks.push(e.data);});
-  recorder.addEventListener('stop',()=>{
-   if(discardOnStop){micStream?.getTracks().forEach(t=>t.stop());micStream=null;recorder=null;discardOnStop=false;return;}
-   const type=recorder?.mimeType||mimeType||'audio/webm';
-   const ext=type.includes('mp4')?'m4a':'webm';
-   const file=new File([new Blob(chunks,{type})],'rekaman-sipetak-'+Date.now()+'.'+ext,{type});
-   micStream?.getTracks().forEach(t=>t.stop());micStream=null;recorder=null;
-   try{U.validateAudio(file);previewAudio(file);status('Rekaman siap diproses. Hanya audio <= 20 MB yang diterima.');}
-   catch(e){status(e.message,true);}
-  },{once:true});
-  recorder.start(1000);status('Sedang merekam. Tekan Hentikan untuk menyimpan audio sementara.');
+ function microphoneError(err){
+  if(err?.name==='NotAllowedError'||err?.name==='PermissionDeniedError'||err?.name==='SecurityError')return 'Akses mikrofon ditolak. Buka SIPETAK langsung di Safari/Chrome melalui HTTPS, izinkan Mikrofon untuk situs ini, muat ulang halaman, lalu coba lagi.';
+  if(err?.name==='NotFoundError'||err?.name==='DevicesNotFoundError')return 'Mikrofon tidak ditemukan. Pastikan perangkat memiliki mikrofon yang aktif.';
+  if(err?.name==='NotReadableError'||err?.name==='TrackStartError')return 'Mikrofon sedang digunakan aplikasi lain atau tidak dapat dibaca. Tutup aplikasi perekam/panggilan lain, lalu coba lagi.';
+  if(err?.name==='OverconstrainedError')return 'Pengaturan mikrofon tidak sesuai dengan perangkat. Coba lagi di browser utama.';
+  return err?.message||'Gagal memulai rekaman. Periksa izin mikrofon dan coba dari browser Safari/Chrome.';
  }
- function stopRecording(){if(recorder?.state==='recording'){recorder.stop();status('Mengakhiri rekaman…');}else status('Tidak ada rekaman aktif.');}
+ function recordingUI(active,pending=false){
+  const button=document.querySelector?.('[data-action="transcript-record"]');
+  if(button){button.textContent=pending?'◌ Menunggu izin mikrofon':active?'● Sedang merekam':'● Mulai rekam';button.setAttribute?.('aria-pressed',String(active));}
+  const indicator=el('transcriptRecordIndicator');
+  if(indicator){indicator.textContent=pending?'◌ Menunggu izin mikrofon…':active?'● Mikrofon aktif — suara sedang direkam':'Mikrofon belum aktif';indicator.dataset.state=pending?'pending':active?'recording':'idle';}
+ }
+ function clearRecordingTimer(){if(recordingTimer){clearInterval(recordingTimer);recordingTimer=null;}recordingStartedAt=0;recordingUI(false);}
+ function recordingElapsed(){return Math.max(0,Math.floor((Date.now()-recordingStartedAt)/1000));}
+ function stopMicrophone(){micStream?.getTracks().forEach(t=>{try{t.stop();}catch{}});micStream=null;}
+ async function startRecording(){
+  if(recordingPending||recorder?.state==='recording'){status('Rekaman sudah berlangsung atau sedang menunggu izin mikrofon.');return;}
+  if(!root.isSecureContext||!navigator.mediaDevices?.getUserMedia||!root.MediaRecorder)throw Error('Perekaman memerlukan browser dengan dukungan mikrofon dan situs HTTPS. Buka SIPETAK di Safari/Chrome, bukan browser di dalam aplikasi lain.');
+  stopDictation();recordingPending=true;const requestId=++recordingRequestId;
+  recordingUI(false,true);
+  status('Meminta izin mikrofon. Pilih Izinkan / Allow pada permintaan browser.');
+  let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}
+  catch(err){if(requestId===recordingRequestId){recordingPending=false;recordingUI(false);throw Error(microphoneError(err));}return;}
+  if(requestId!==recordingRequestId){stream.getTracks().forEach(t=>t.stop());return;}
+  recordingPending=false;micStream=stream;
+  const mimeType=mimeChoice();let activeRecorder;
+  try{
+   activeRecorder=new root.MediaRecorder(stream,mimeType?{mimeType}:undefined);
+   recorder=activeRecorder;discardOnStop=false;
+   const chunks=[];
+   activeRecorder.addEventListener('dataavailable',event=>{if(event.data?.size)chunks.push(event.data);});
+   activeRecorder.addEventListener('error',event=>{status('Perekaman gagal: '+microphoneError(event.error),true);if(activeRecorder.state==='recording')activeRecorder.stop();});
+   activeRecorder.addEventListener('stop',()=>{
+    const discarded=discardOnStop;
+    const type=chunks.find(c=>c.type)?.type||activeRecorder.mimeType||mimeType||'audio/webm';
+    const ext=/mp4|aac/.test(type)?'m4a':/wav/.test(type)?'wav':'webm';
+    const file=new File([new Blob(chunks,{type})],'rekaman-sipetak-'+Date.now()+'.'+ext,{type});
+    clearRecordingTimer();stopMicrophone();if(recorder===activeRecorder)recorder=null;
+    if(discarded){discardOnStop=false;return;}
+    try{U.validateAudio(file);previewAudio(file);status('Rekaman selesai ('+fmtBytes(file.size)+'). Dengarkan audio, lalu tekan Ubah rekaman menjadi teks.');}
+    catch(err){status('Tidak ada audio yang dapat disimpan: '+(err.message||'rekaman kosong')+'. Pastikan izin mikrofon aktif dan coba lagi.',true);}
+   },{once:true});
+   activeRecorder.start(); // Safari handles final dataavailable on stop more reliably without a timeslice.
+   recordingStartedAt=Date.now();recordingUI(true);
+   status('● Sedang merekam (00:00). Tekan Hentikan untuk menyelesaikan audio.');
+   recordingTimer=setInterval(()=>{
+    if(recorder!==activeRecorder||activeRecorder.state!=='recording'){clearRecordingTimer();return;}
+    const n=recordingElapsed();status('● Sedang merekam ('+String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0')+'). Tekan Hentikan untuk menyelesaikan audio.');
+   },1000);
+   for(const track of stream.getAudioTracks()){track.addEventListener?.('ended',()=>{if(recorder===activeRecorder&&activeRecorder.state==='recording'){status('Mikrofon terputus. Mengakhiri rekaman…',true);activeRecorder.stop();}},{once:true});}
+  }catch(err){clearRecordingTimer();stopMicrophone();recorder=null;throw Error(microphoneError(err));}
+ }
+ function stopRecording(){
+  if(recordingPending){status('Browser masih meminta izin mikrofon. Jawab permintaan Izinkan, lalu tekan Hentikan.');return;}
+  if(recorder?.state==='recording'){status('Mengakhiri rekaman dan menyiapkan audio…');clearRecordingTimer();recorder.stop();}
+  else status(audioFile?'Rekaman sudah selesai. Dengarkan hasil, kemudian ubah menjadi teks.':'Belum ada rekaman aktif. Tekan Mulai Rekam terlebih dahulu.');
+ }
  function stopDictation(){if(recognition){const r=recognition;recognition=null;try{r.stop();}catch{}}}
  function startDictation(){
   if(recognition){stopDictation();status('Dikte dihentikan. Periksa dan koreksi hasilnya.');return;}
@@ -210,12 +253,14 @@
  }
  async function copyOutput(){const val=el('transcriptOutputText')?.value||'';if(!val)throw Error('Buka hasil draf dahulu.');await navigator.clipboard.writeText(val);status('Draf berhasil disalin. Verifikasi sebelum digunakan.');}
  function cancel(){if(controller)controller.abort();controller=null;working=false;status('Proses dibatalkan. Rekaman tetap lokal pada halaman ini.');}
- function stopAll(){if(controller)controller.abort();controller=null;working=false;stopDictation();if(recorder?.state==='recording')recorder.stop();micStream?.getTracks().forEach(t=>t.stop());}
+ function stopAll(){if(controller)controller.abort();controller=null;working=false;recordingRequestId++;recordingPending=false;stopDictation();if(recorder?.state==='recording')recorder.stop();clearRecordingTimer();stopMicrophone();}
  function leave(){stopAll();}
  function secureLock(){discardOnStop=true;stopAll();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=null;draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};}
  function action(button){const a=button?.dataset?.action||'';if(!a.startsWith('transcript-'))return false;
   const actions={'transcript-record':startRecording,'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
-  Promise.resolve().then(()=>actions[a]?.()).catch(e=>{if(e.name==='AbortError')status('Permintaan dibatalkan.');else status(e.message||'Operasi gagal.',true);});return true;
+  // Invoke immediately within the click gesture; some mobile browsers require it for microphone access.
+  try{Promise.resolve(actions[a]?.()).catch(e=>{if(e.name==='AbortError')status('Permintaan dibatalkan.');else status(e.message||'Operasi gagal.',true);});}
+  catch(e){status(e.message||'Operasi gagal.',true);}return true;
  }
  root.SIPETAK_TRANSCRIPT={page,action,change,input,stopAll,leave,secureLock,records,outputs:U.outputs};
 })(window);

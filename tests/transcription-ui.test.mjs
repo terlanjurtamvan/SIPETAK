@@ -30,6 +30,9 @@ test('module renders a navigation page without unescaped title and stores editab
  const html=ctx.SIPETAK_TRANSCRIPT.page();
  assert.match(html,/Transkripsi Suara & Notulensi/);
  assert.match(html,/Ubah rekaman menjadi teks/);
+ assert.match(html,/id="transcriptRecordIndicator"/);
+ assert.ok(html.indexOf('id="transcriptStatus"')<html.indexOf('id="transcriptPreview"'),'recording status must appear above preview and consent');
+ assert.equal((html.match(/id="transcriptStatus"/g)||[]).length,1,'avoid duplicate status targets');
  assert.ok(!html.includes('<script>'));assert.ok(html.includes('Unggah rekaman'));
  assert.equal(ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-save'}}),true);
  await tick();

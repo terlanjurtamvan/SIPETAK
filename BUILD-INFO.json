@@ -1,5 +1,5 @@
 {
-  "version": "3.9.0-rc1",
+  "version": "3.9.2-rc3",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -51,5 +51,5 @@
   ],
   "deployment_status": "staging-not-production-verified",
   "transcription_backend": "Cloudflare Pages Function /api/transcribe; requires OPENAI_API_KEY + D1 TRANSCRIBE_DB + TRANSCRIBE_ENABLED=true",
-  "notes": "Existing vault schema 3 and encryption format unchanged; transcription text is optional in data.transcriptions; audio not persisted; data migration not required."
+  "notes": "Perbaikan perekaman: langsung saat klik, status izin, durasi, pesan error iPhone, penanganan MediaRecorder dan pembatalan; belum diuji perangkat nyata."
 }

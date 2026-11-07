@@ -17,3 +17,9 @@
 .transcript-record strong{display:block;overflow-wrap:anywhere}
 .transcript-record .actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 @media (max-width:900px){.transcript-pane{grid-template-columns:1fr}.transcript-results{grid-template-columns:1fr}}
+
+/* Feedback is adjacent to record controls: visible without scrolling on mobile. */
+.transcript-record-indicator{font-weight:700;margin:4px 0 5px;color:#536276}
+.transcript-record-indicator[data-state="recording"]{color:#b91c1c}
+.transcript-record-indicator[data-state="pending"]{color:#945d0a}
+.transcript-card .transcript-status{display:block;margin:3px 0 10px;line-height:1.45}
