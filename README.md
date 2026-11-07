@@ -1,4 +1,10 @@
-## v3.12.5-rc1 — Panduan penggunaan sampai print/PDF (7 November 2026)
+# SIPETAK v3.14.0-rc1 — Peta Kerja Interaktif & Catatan Pribadi
+
+Versi ini ditujukan untuk **satu pengguna**. Tambahan: peta navigasi interaktif **Saat Ini (AS-IS)** dan **Target Otomatis (TO-BE)**, serta **Catatan Kerja** sebagai pengganti buku catatan pribadi.
+
+Lihat `docs/PETA-OPERASIONAL-DAN-CATATAN-PRIBADI-3.13.md` untuk kemampuan aktual, batasan dan panduan uji. Mesin transkripsi suara dan format dokumen sama persis dengan v3.12.5.
+
+## v3.14.0-rc1 — Panduan penggunaan sampai print/PDF (7 November 2026)
 
 Panduan 8 langkah ditambahkan langsung di **Transkripsi Suara** (panel 📘 yang dapat dibuka/tutup), dan di menu **Panduan Penggunaan** (cari “rekam”, “notulen”, “risalah”, atau “cetak”). Di dekat tombol **Cetak / PDF Notulen/Risalah** terdapat instruksi printer/PDF serta solusi ketika pop-up diblokir. Panduan cetak rinci tersedia di [docs/PANDUAN-TRANSKRIPSI-SAMPAI-CETAK-3.12.5.md](docs/PANDUAN-TRANSKRIPSI-SAMPAI-CETAK-3.12.5.md).
 
@@ -46,3 +52,12 @@ Untuk perbaikan terbaru Transkripsi Suara, lihat [Audit 3.12.2](docs/AUDIT-TRANS
 ## Integrasi referensi Meta AI 3.12.3
 
 Form rapat menambah Tahun Sidang, Masa Persidangan, Rapat Ke-, dan Acara Rapat. Saat merekam, notulis dapat menambahkan penanda pembicara/waktu **secara manual**. Penanda tersimpan di brankas terenkripsi bersama transkrip dan dicetak dalam lampiran konsep Notulen/Risalah. Ini bukan identifikasi pembicara otomatis. Mesin Rekam WAV + Dikte Chrome **tidak diubah**. Berkas Meta AI `notulenrek.html` **tidak perlu dan tidak boleh diunggah sebagai pengganti aplikasi**. Lihat `docs/INTEGRASI-REFERENSI-META-AI-3.12.3.md`.
+
+## v3.14.0-rc1: Peta Kerja & Asisten Sekwan
+- Peta Kerja AS-IS menampilkan alur operasional yang tersedia beserta tombol navigasi ke modul nyata; TO-BE kini menampilkan alur dan target terpisah yang ditandai belum aktif.
+- Asisten Sekwan memuat flowchart navigasi aktif, register tracking Raperda (tahap, PIC, tenggat, hambatan), Buku Tamu pribadi, dan Telepon Cepat (klik panggil).
+- Sekali menyimpan catatan Raperda/kunjungan yang berisi tindak lanjut dapat dibuat draf Tugas Harian secara otomatis. Tidak membuat keputusan/persetujuan resmi.
+- Data baru disimpan dalam JSON brankas terenkripsi yang sudah ada, tanpa migrasi Supabase. Kontak telepon dan identitas tamu jangan diunggah ke layanan pihak ketiga tanpa izin.
+- Pemutar/mesin rekam audio, transkripsi, dan Notulen/Risalah tidak diubah. Uji dahulu di staging.
+
+Panduan pemakaian dan commit: `docs/PETA-KERJA-SEKWAN-v3.14.md`.

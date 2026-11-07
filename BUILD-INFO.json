@@ -1,5 +1,5 @@
 {
-  "version": "3.12.5-rc1",
+  "version": "3.14.0-rc1",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -23,10 +23,15 @@
     "real OpenAI WebRTC live session",
     "iPhone Safari realtime WebRTC and WAV recording simultaneously",
     "real-time speech recognition in user iPhone Safari (partial browser support)",
-    "simultaneous Web Speech Recognition and getUserMedia on real iPhone and stable Safari"
+    "simultaneous Web Speech Recognition and getUserMedia on real iPhone and stable Safari",
+    "cross-device persistence and real browser recording after 3.13.0 integration",
+    "every-module full automation is an ongoing target rather than implemented",
+    "new v3.14.0 Sekwan and work map full browser end-to-end field test (navigation blocked in automated browser environment)",
+    "quick-call tel: prompts on real Mac and iPhone",
+    "production Cloudflare deployment, vault migration and sync for Sekwan new records"
   ],
   "cloud_data_format": "sipetak-vault-v1 (AES-256-GCM encrypted JSON envelope)",
-  "note": "v3.12.5: in-app 8-step transcription-to-print guide, FAQ for print pop-ups, guide navigation, dedicated full user manual; audio and transcript engine unchanged",
+  "note": "v3.14.0: peta AS-IS dan TO-BE berbeda dan interaktif; Peta Asisten Sekwan, tracking Raperda, buku tamu, telepon cepat + draf tugas dari tindak lanjut; penyimpanan brankas terenkripsi tetap kompatibel.",
   "product": "SIPETAK Pribadi",
   "build_date": "2026-11-07",
   "features": [
@@ -63,7 +68,17 @@
     "prominent-audio-download",
     "notulen-dan-risalah-dprd-konsep-word-cetak-pdf",
     "recording-idle-state-and-consent-onboarding",
-    "in-app-usage-guide-record-to-notulen-risalah-print"
+    "in-app-usage-guide-record-to-notulen-risalah-print",
+    "peta-kerja-as-is-to-be-navigasi-langsung",
+    "single-user-personal-notebook",
+    "deterministic-one-input-linked-task-meeting-review-dim-evidence-drafts",
+    "encrypted-personal-note-vault-with-compatible-schema",
+    "sekwan-clickable-operational-map",
+    "raperda-register-stage-tracking",
+    "personal-visitor-register",
+    "encrypted-quick-phonebook-click-to-call",
+    "auto-draft-task-from-sekwan-followup",
+    "distinguish-as-is-to-be-interactive-workmap"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
@@ -93,5 +108,7 @@
       "Meta AI speech-only recorder"
     ],
     "audio_engine_changed": false
-  }
+  },
+  "automated_single_entry_scope": "catatan tersimpan lalu tugas draf; jenis rapat->agenda draf; telaah->telaahan draf; disposisi->agenda/disposisi draf; Raperda->DIM draf; bidang berkaitan->metadata bukti tidak terverifikasi; lifecycle via existing reconciliation.",
+  "single_user_mode": "Satu pemilik brankas; modul Asisten Sekwan adalah catatan bantuan pribadi, bukan kewenangan persetujuan."
 }
