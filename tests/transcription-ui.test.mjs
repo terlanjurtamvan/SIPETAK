@@ -240,3 +240,47 @@ test('marker cannot be added without an active recording',async()=>{
  await tick();
  assert.match(controls.transcriptStatus.textContent,/Mulai rekaman dahulu/);
 });
+
+test('idle screenshot regression: explains consent and disables stop + markers before recording',async()=>{
+ const {ctx,controls}=build();
+ const html=ctx.SIPETAK_TRANSCRIPT.page();
+ assert.match(html,/Langkah 1: centang izin merekam/);
+ assert.match(html,/data-action="transcript-stop" disabled/);
+ assert.match(html,/data-action="transcript-marker" data-speaker="Ketua Rapat" disabled/);
+ assert.match(html,/Tombol penanda aktif setelah rekaman benar-benar dimulai/);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-marker',speaker:'Ketua Rapat'}});
+ assert.match(controls.transcriptStatus.textContent,/Mulai rekaman dahulu/);
+ assert.equal(controls.transcriptStatus.style.color,'','Idle guidance must not appear as a red error');
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-combined'}});
+ assert.match(controls.transcriptStatus.textContent,/Centang izin perekaman/);
+ assert.equal(controls.transcriptStatus.style.color,'','Consent is a normal first-time setup step');
+ ctx.SIPETAK_TRANSCRIPT.secureLock();
+});
+
+test('consent grants startup and marker buttons turn active only while recording',async()=>{
+ const {ctx,controls}=build();ctx.SIPETAK_TRANSCRIPT.page();
+ let markerEnabled=null,recordStopped=false;
+ const start={disabled:false,textContent:''},stop={disabled:true,textContent:''};
+ const speaker={disabled:true},nameButton={disabled:true},timeButton={disabled:true};
+ const markerCustom={disabled:true},markerHint={textContent:''};
+ const help={textContent:''},wrap={classList:{toggle(){},add(){}}};
+ Object.assign(controls, {transcriptCustomSpeaker:markerCustom,transcriptMarkerHint:markerHint,transcriptStartHelp:help,transcriptConsentWrap:wrap,transcriptSpeakerMarkers:{innerHTML:''}});
+ ctx.document.querySelector=(sel)=>sel.includes('transcript-combined')?start:sel.includes('transcript-stop')?stop:null;
+ ctx.document.querySelectorAll=()=>[speaker,nameButton,timeButton];
+ ctx.SIPETAK_COMBINED_ENGINE={supported:()=>true,start:({onFinished})=>({ready:Promise.resolve(),stop:async()=>{
+  recordStopped=true;onFinished(new ctx.File([new Uint8Array(1024)],'hasil.wav',{type:'audio/wav'}),null);
+ },abort:()=>{}})};
+ ctx.SIPETAK_TRANSCRIPT.change({target:{id:'transcriptConsent',checked:true}}); // first update from checkbox is controlled by DOM
+ controls.transcriptConsent.checked=true;
+ ctx.SIPETAK_TRANSCRIPT.change({target:{id:'transcriptConsent',checked:true}});
+ assert.match(help.textContent,/Izin sudah dicentang/);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-combined'}});await tick();
+ assert.equal(start.disabled,true);assert.equal(stop.disabled,false);
+ assert.equal(speaker.disabled,false);assert.equal(nameButton.disabled,false);assert.equal(markerCustom.disabled,false);
+ assert.match(markerHint.textContent,/Rekaman aktif/);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-marker',speaker:'Ketua Rapat'}});
+ assert.match(controls.transcriptSpeakerMarkers.innerHTML,/Ketua Rapat/);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-stop'}});await tick();
+ assert.equal(recordStopped,true);assert.equal(stop.disabled,true);assert.equal(speaker.disabled,true);assert.equal(markerCustom.disabled,true);
+ ctx.SIPETAK_TRANSCRIPT.secureLock();
+});
