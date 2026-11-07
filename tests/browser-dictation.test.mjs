@@ -37,7 +37,7 @@ const action=(c,name)=>c.SIPETAK_TRANSCRIPT.action({dataset:{action:name}});
 
 test('one tap uses native browser recognizer instead of Cloudflare; interim text appears and is not auto saved',()=>{
  const {c,dat,nodes,instances,saves}=setup();
- assert.match(c.SIPETAK_TRANSCRIPT.page(),/Mulai Ketik Langsung/);
+ assert.match(c.SIPETAK_TRANSCRIPT.page(),/Mulai Rekam \+ Tulis Langsung/);assert.match(c.SIPETAK_TRANSCRIPT.page(),/Dikte saja/);
  action(c,'transcript-dictate');
  assert.equal(instances.length,1);
  assert.equal(instances[0].lang,'id-ID');

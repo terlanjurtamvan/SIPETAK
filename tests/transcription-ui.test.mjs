@@ -28,9 +28,9 @@ const tick=()=>new Promise(r=>setTimeout(r,15));
 test('module renders a navigation page without unescaped title and stores editable draft',async()=>{
  const {ctx,controls,data,getSaves}=build();
  const html=ctx.SIPETAK_TRANSCRIPT.page();
- assert.match(html,/Ketik Langsung dari Suara/);
- assert.match(html,/Mulai Ketik Langsung/);
- assert.ok(!html.includes('<script>'));assert.ok(html.includes('Unggah file'));assert.ok(!html.includes('Periksa kesiapan server'));
+ assert.match(html,/Rekam \+ Tulis Langsung/);
+ assert.match(html,/Mulai Rekam \+ Tulis Langsung/);
+ assert.ok(!html.includes('<script>'));assert.ok(html.includes('unggah rekaman'));assert.ok(!html.includes('Periksa kesiapan server'));
  assert.equal(ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-save'}}),true);
  await tick();
  assert.equal(getSaves(),1);assert.equal(data.transcriptions.length,1);
@@ -70,7 +70,7 @@ test('one tap starts WAV recording and live text in the same draft without auto 
   connect:async({stream,classification})=>{streamSeen=stream.getAudioTracks().length===1&&classification==='Internal';onText('Rapat sudah dimulai');},
   stop:async()=>'',abort:()=>{}
  })};
- assert.match(ctx.SIPETAK_TRANSCRIPT.page(),/Mulai Ketik Langsung/);
+ assert.match(ctx.SIPETAK_TRANSCRIPT.page(),/Mulai Rekam \+ Tulis Langsung/);
  ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-live'}});await new Promise(r=>setTimeout(r,25));
  assert.equal(streamSeen,true);
  assert.match(controls.transcriptText.value,/Rapat sudah dimulai/);
@@ -97,4 +97,49 @@ test('offline backend readiness never pretends that recording audio is live tran
  ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-stop'}});await new Promise(r=>setTimeout(r,40));
  assert.equal(stopped,true);
  ctx.SIPETAK_TRANSCRIPT.secureLock();
+});
+
+
+test('one primary button records WAV and writes interim text before Stop; WAV remains downloadable',async()=>{
+ const {ctx,controls,data,getSaves}=build();
+ controls.transcriptConsent.checked=true;
+ controls.transcriptPreview={innerHTML:'',querySelector:()=>null};
+ controls.transcriptLiveBanner={textContent:'',classList:{toggle(){}}};
+ controls.transcriptAudioIndicator={textContent:''};
+ controls.transcriptTextIndicator={textContent:''};
+ let received=false,stopped=false,speechCall,engineUsed=0;
+ ctx.SIPETAK_COMBINED_ENGINE={supported:()=>true,start:function({onText,onFinished,onState}){
+   engineUsed++; speechCall=onText;
+   onState('audio-ready');
+   return {ready:Promise.resolve({}),stop:async()=>{
+     stopped=true;
+     const file=new ctx.File([new Uint8Array(4096)],'rapat.wav',{type:'audio/wav'});
+     onFinished(file,null);
+     return file;
+   },abort:()=>{}};
+ }};
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-combined'}});await tick();
+ assert.equal(engineUsed,1);
+ speechCall('Rapat pembahasan telah dimulai');
+ assert.equal(controls.transcriptText.value,'Pimpinan membuka rapat. Sekretariat perlu menyiapkan bahan.\n\nRapat pembahasan telah dimulai');
+ assert.match(controls.transcriptTextIndicator.textContent,/tertulis/);
+ assert.equal(getSaves(),0);
+ ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-stop'}});await tick();
+ assert.equal(stopped,true);
+ assert.match(controls.transcriptPreview.innerHTML,/download=/);
+ assert.match(controls.transcriptPreview.innerHTML,/rapat.wav/);
+ assert.equal(data.transcriptions.length,0,'transcript still needs review and explicit save');
+});
+
+test('combined mode refuses restricted material and missing consent without opening microphone',async()=>{
+ for(const kind of ['Terbatas','tanpa izin']){
+  const {ctx,controls}=build();
+  let calls=0;controls.transcriptConsent.checked=kind==='Terbatas';
+  controls.transcriptClass.value=kind==='Terbatas'?'Terbatas':'Internal';
+  ctx.SIPETAK_COMBINED_ENGINE={supported:()=>true,start:()=>{calls++;throw Error('must not call');}};
+  ctx.SIPETAK_TRANSCRIPT.action({dataset:{action:'transcript-combined'}});
+  await tick();
+  assert.equal(calls,0);
+  assert.match(controls.transcriptStatus.textContent,kind==='Terbatas'?/Terbatas/:/Centang izin/);
+ }
 });

@@ -1,31 +1,27 @@
-# SIPETAK Pribadi — v3.11.0-rc1
+# SIPETAK Pribadi — v3.12.0-rc1
 
-**Status: release candidate untuk diuji; belum dipasang di GitHub atau Cloudflare produksi.**
+**Status: kandidat uji/staging; belum diterapkan ke GitHub atau Cloudflare produksi dan belum diuji pada Safari iPhone pengguna.**
 
-Aplikasi SIPETAK untuk pekerjaan, agenda, SKP/RHK, bukti dukung, dan draf notulensi. Data brankas terenkripsi lama tetap dipertahankan.
+SIPETAK membantu pekerjaan, agenda, SKP/RHK, bukti dukung, dan draf notulensi. Versi ini menambahkan satu tombol **🔴 Mulai Rekam + Tulis Langsung**, yang mencoba merekam audio WAV dan menuliskan ucapan di kolom teks *pada saat bersamaan* menggunakan layanan pengenal suara bawaan browser. Tidak perlu kunci API atau konfigurasi Cloudflare khusus SIPETAK untuk mode browser.
 
-## Ketik langsung tanpa konfigurasi AI/Cloudflare
+**Batasan yang wajib diketahui:** Safari iPhone dapat membisukan `getUserMedia()` saat `SpeechRecognition` berjalan, sehingga audio atau teks bisa tidak lengkap walaupun antarmukanya menampilkan proses aktif. Kode mendeteksi kejadian `mute` dan menampilkan peringatan. Pengujian otomatis **tidak membuktikan mode gabungan bekerja pada iPhone nyata**. Untuk kebutuhan yang benar-benar andal gunakan satu aliran audio ke server transkripsi streaming atau aplikasi iPhone native.
 
-1. Buka SIPETAK → **Menu → Transkripsi Suara** dan pastikan brankas sudah dibuka.
-2. Isi nama kegiatan (opsional saat mendikte; wajib sebelum menyimpan). Pilih **Umum** atau **Internal** hanya jika kontennya diizinkan diproses oleh layanan pengenal suara browser. **Terbatas** tidak dapat menggunakan layanan pengenal suara browser.
-3. Centang izin pengenalan suara; klik **🎤 Mulai Ketik Langsung**, berikan izin mikrofon bila diminta, lalu bicara dalam bahasa Indonesia.
-4. Teks langsung muncul dan dapat bertambah di kolom hasil. Tekan **■ Hentikan**; periksa teks, beri judul, centang verifikasi, lalu **Simpan teks terenkripsi**.
-5. Jika Safari berhenti di tengah sesi, tekan Mulai lagi: teks sebelumnya tidak hilang. Jika Safari tidak mendukung pengenalan suara, **ketuk kolom teks lalu ikon mikrofon di keyboard iPhone**. Pastikan fitur Dikte iPhone aktif di Pengaturan → Umum → Keyboard.
+## Cara pemakaian
 
-**Tidak perlu OPENAI_API_KEY, TRANSCRIBE_ENABLED, D1, atau perubahan server** untuk mode utama. SIPETAK tidak mengirim audio melalui API miliknya saat memakai dikte browser, tetapi perangkat/browser mungkin memproses audio melalui layanan pihak ketiga. Jangan gunakan untuk materi terbatas atau yang tidak mendapat izin. Fitur ini memerlukan Safari/iOS yang mendukung Web Speech; dukungan iPhone tidak selalu stabil.
+1. Buka brankas → **Menu → Transkripsi Suara**. Isi nama agenda.
+2. Untuk materi **Umum** atau **Internal yang diizinkan** diproses browser, centang persetujuan rekaman dan pengenalan suara. Materi **Terbatas** tidak boleh memakai mode ini.
+3. Ketuk **Mulai Rekam + Tulis Langsung** dan izinkan mikrofon. Lihat indikator terpisah **Audio** dan **Teks**. Tulisan muncul bertahap jika browser mendukung penggunaan mikrofon secara bersamaan.
+4. Tekan **Hentikan**; putar WAV untuk mengecek isinya. SIPETAK mencoba mengunduh audio; **pastikan file ada di Files**. Jika belum, ketuk **Unduh rekaman WAV ke perangkat** (Safari: Bagikan → Simpan ke File). Audio hanya sementara pada halaman sebelum diunduh.
+5. Koreksi transkrip, konfirmasi pemeriksaan, **Simpan teks terenkripsi**, lalu pilih draf notulensi, bahan ringkasan, tugas atau metadata bukti.
 
-**Perbedaan penting:** Ketik Langsung menghasilkan teks, **tidak membuat file rekaman audio**. Untuk menyimpan audio, buka bagian **Rekam atau unggah file audio (pilihan tambahan)** dan gunakan perekam WAV terpisah. Menjalankan kedua pengambil mikrofon bersamaan pada Safari iPhone tidak dijamin berjalan. Fitur backend lama ada dalam kode untuk integrasi opsional, tetapi tidak diperlukan untuk mode utama.
+Pengenalan suara browser bisa menggunakan layanan eksternal penyedia browser, termasuk saat tidak memakai API milik SIPETAK. Jangan gunakan untuk konten rahasia tanpa izin. Teks yang dihasilkan adalah **draf**, bukan keputusan atau berita acara resmi.
 
-## Hasil satu input
+## Pembaruan aman
 
-Transkrip yang diperiksa dapat disimpan dan digunakan untuk menyiapkan beberapa **draf** notulensi, ringkasan, tindak lanjut, dan metadata bukti. Tidak boleh dianggap sebagai berita acara atau keputusan resmi tanpa verifikasi.
+1. Buat backup aplikasi dan branch staging; jangan hapus database Supabase.
+2. Untuk repositori **v3.11.0-rc1**, pasang paket PATCH ke root repo: ekstrak ZIP dan salin **isi folder `SIPETAK-main/`** (bukan folder pembungkusnya). Jika memerlukan salinan utuh, gunakan paket FULL.
+3. Jalankan `npm run verify` dengan Node 20+.
+4. Deploy staging melalui mekanisme Cloudflare Pages yang sekarang digunakan; tunggu sampai footer menampilkan `v3.12.0-rc1`.
+5. Uji dengan ucapan tidak rahasia di iPhone: **WAV bisa diputar dan teks muncul sebelum menghentikan rekaman**. Jika salah satu gagal, jangan lepaskan sebagai fitur produksi; gunakan mode alternatif atau lakukan implementasi server/native.
 
-## Pemasangan aman
-
-- Cadangkan GitHub dan brankas sebelum memperbarui.
-- Untuk versi v3.10.1-rc2, terapkan ZIP **PATCH** ke root repositori (isi folder `SIPETAK-main/`, bukan membungkus folder baru).
-- Deploy staging di Cloudflare Pages, muat ulang Safari sampai footer bertuliskan **v3.11.0-rc1**, lalu uji suara nonrahasia.
-- `npm run verify` menjalankan pemeriksaan struktur dan pengujian Node otomatis.
-- Format brankas `sipetak-vault-v1` tidak diubah; belum diuji dengan browser Safari pada perangkat pengguna.
-
-Panduan 1 halaman: [docs/PANDUAN-KETIK-LANGSUNG-3.11.md](docs/PANDUAN-KETIK-LANGSUNG-3.11.md).
+Informasi lengkap: [docs/REKAM-KETIK-BERSAMA-3.12.md](docs/REKAM-KETIK-BERSAMA-3.12.md). Untuk pengembalian versi lama, pulihkan commit v3.11.0-rc1; format brankas tidak berubah.

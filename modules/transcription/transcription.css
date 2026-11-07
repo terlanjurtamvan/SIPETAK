@@ -39,3 +39,9 @@
 .transcript-audio-tools[open] summary{margin-bottom:14px}
 .transcript-keyboard-fallback{margin:10px 0;line-height:1.55}
 @media(max-width:600px){.transcript-primary-actions .transcript-live-start{width:100%;flex-basis:100%}}
+
+/* Combined recording and live dictation: visible independent outcomes. */
+.transcript-dual-status{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0;font-size:.9rem;font-weight:600}
+.transcript-dual-status span{padding:10px;border-radius:8px;border:1px solid var(--border,rgba(120,120,120,.22));background:var(--surface-alt,rgba(95,126,155,.06));overflow-wrap:anywhere}
+.transcript-audio-download{display:inline-flex;align-items:center;justify-content:center;margin:8px 0 6px;font-weight:700;white-space:normal}
+@media(max-width:480px){.transcript-dual-status{grid-template-columns:1fr}}

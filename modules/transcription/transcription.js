@@ -7,9 +7,11 @@
  let audioFile=null,audioUrl='',recorder=null,recordStarting=false,recordStopping=false,working=false,controller=null;
  let recognition=null,speechBase='',speechCommitted='',speechResults=[],dictationWanted=false,dictationRetryTimer=null,dictationRestarts=0,dictationHadResults=false,dictationLastError='',discardOnStop=false,recorderEpoch=0;
  let liveHandle=null,liveStarting=false,liveBaseText='',liveConnected=false,liveTimer=null;
+ let combinedHandle=null,combinedStarting=false,combinedStopping=false,combinedHadText=false,combinedMuted=false,combinedProblem='',combinedEpoch=0;
+ function indicators(audio,text){if(audio&&el('transcriptAudioIndicator'))el('transcriptAudioIndicator').textContent='Audio: '+audio;if(text&&el('transcriptTextIndicator'))el('transcriptTextIndicator').textContent='Teks: '+text;}
  const el=id=>document.getElementById(id);
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- function status(message,isError=false){const x=el('transcriptStatus');if(x){x.textContent=message;x.style.color=isError?'#b73b32':'';}const banner=el('transcriptLiveBanner');if(banner){banner.textContent=message;banner.classList?.toggle?.('is-live',!isError&&!!(liveStarting||liveHandle));}else if(isError&&typeof toast==='function')toast(message,true);}
+ function status(message,isError=false){const x=el('transcriptStatus');if(x){x.textContent=message;x.style.color=isError?'#b73b32':'';}const banner=el('transcriptLiveBanner');if(banner){banner.textContent=message;banner.classList?.toggle?.('is-live',!isError&&!!(liveStarting||liveHandle||combinedHandle));}else if(isError&&typeof toast==='function')toast(message,true);}
  function available(){return !!data&&!!vaultKey;}
  function records(){if(!available())return [];if(!Array.isArray(data.transcriptions))data.transcriptions=[];return data.transcriptions;}
  function previewAudio(file){
@@ -17,40 +19,39 @@
   audioUrl='';audioFile=file;
   if(file){audioUrl=URL.createObjectURL(file);draft.filename=file.name;}
   const mount=el('transcriptPreview');if(!mount)return;
-  mount.innerHTML=file?`<audio controls preload="metadata" aria-label="Putar rekaman untuk pemeriksaan" src="${esc(audioUrl)}"></audio><p class="hint">${esc(file.name)} (${fmtBytes(file.size)}). Audio hanya sementara pada halaman ini; <a href="${esc(audioUrl)}" download="${esc(file.name)}">unduh rekaman</a> sebelum menutup jika ingin menyimpan.</p><p class="transcript-audio-error" id="transcriptAudioError" role="alert" hidden></p>`:'';
+  mount.innerHTML=file?`<audio controls preload="metadata" aria-label="Putar rekaman untuk pemeriksaan" src="${esc(audioUrl)}"></audio><p class="hint">${esc(file.name)} (${fmtBytes(file.size)}). Audio masih sementara pada halaman ini.</p><a class="btn secondary transcript-audio-download" href="${esc(audioUrl)}" download="${esc(file.name)}">⬇ Unduh rekaman WAV ke perangkat</a><p class="hint">Di Safari, jika file dibuka, gunakan Bagikan → Simpan ke File. Jangan tutup halaman sebelum tersimpan.</p><p class="transcript-audio-error" id="transcriptAudioError" role="alert" hidden></p>`:'';
   if(!file)return;
   const player=mount.querySelector('audio');
   player?.addEventListener('error',()=>{
-   const message='Audio tidak dapat diputar di browser ini. Pada iPhone, rekam ulang dengan tombol “Rekam kompatibel (WAV)” atau unggah dari Memo Suara. Jangan kirim file rusak untuk transkripsi.';
+   const message='Audio tidak dapat diputar di browser ini. Simpan file WAV terlebih dahulu, lalu coba buka lewat Files/Voice Memos di iPhone. Jangan kirim file rusak untuk transkripsi.';
    const target=el('transcriptAudioError');if(target){target.textContent=message;target.hidden=false;}
    status(message,true);
   });
  }
+ function tryAutoDownload(){try{el('transcriptPreview')?.querySelector?.('a[download]')?.click?.();}catch{/* Safari may block automatic downloads; visible link remains. */}}
  function readyOutputs(){try{return U.outputs(draft.title,draft.text,today());}catch{return null;}}
  function page(){
   if(!available())return '<section class="card">Brankas harus dibuka dahulu.</section>';
   const readonly=!!myYearArchived(),list=records().filter(x=>Number(x.performanceYear)===Number(myActiveYear())).slice().reverse();
   const meetingChoices=myItems('meetings').map(m=>`<option value="${esc(m.id)}" ${draft.meetingId===m.id?'selected':''}>${esc(m.title||'Agenda tanpa nama')}</option>`).join('');
-  return `<div class="section-head"><div><h3>🎤 Ketik Langsung dari Suara</h3><p>Tekan Mulai Ketik Langsung, berbicara, dan tulisan muncul. Tanpa konfigurasi server SIPETAK.</p></div></div>
-  <div class="callout warn"><b>Privasi:</b> Dikte browser dapat memakai layanan pengenal suara milik penyedia browser. Jangan gunakan untuk materi Terbatas atau materi internal yang tidak diizinkan diproses pihak ketiga. Teks perlu diperiksa; hanya teks yang Anda simpan masuk ke brankas, bukan audio.</div>
+  return `<div class="section-head"><div><h3>🎙️ Rekam + Tulis Langsung</h3><p>Satu tombol untuk merekam WAV dan menuliskan ucapan saat berbicara — tanpa API SIPETAK.</p></div></div>
+  <div class="callout warn"><b>Privasi:</b> Pengenalan suara bawaan browser dapat mengirim audio ke layanan penyedia browser. Gunakan hanya untuk materi yang diizinkan instansi. Materi <b>Terbatas</b> tidak bisa memakai mode ini.</div>
   <div class="transcript-pane">
    <section class="card transcript-card">
     <div class="field"><label for="transcriptTitle">Nama kegiatan / agenda</label><input id="transcriptTitle" maxlength="160" placeholder="Contoh: Rapat pembahasan Raperda" value="${esc(draft.title)}" ${readonly?'disabled':''}></div>
-    <div class="field"><label for="transcriptClass">Klasifikasi materi</label><select id="transcriptClass" ${readonly?'disabled':''}>${allowedClass.map(x=>`<option ${x===draft.classification?'selected':''}>${x}</option>`).join('')}</select><p class="hint">Klasifikasi Terbatas tidak boleh dikirim ke layanan transkripsi eksternal.</p></div>
-    <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya mengizinkan pengenalan suara melalui browser sesuai aturan instansi. Layanan browser mungkin memproses suara secara online.</label>
-    <div class="transcript-primary-actions"><button class="btn transcript-live-start" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Mulai Ketik Langsung</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button></div>
-    <p class="hint transcript-direct-hint">Bicara bahasa Indonesia, teks langsung ditulis di bawah. Tidak membutuhkan pengaturan AI, Cloudflare, atau kunci API SIPETAK. <b>Mode ini hanya menghasilkan teks, bukan file audio.</b> Jika Safari menghentikan dikte, tekan Mulai lagi untuk melanjutkan tulisan yang ada.</p>
-    <div id="transcriptLiveBanner" class="transcript-live-banner" role="status" aria-live="polite">Siap mengetik dari suara. Tekan Mulai Ketik Langsung.</div>
-    <p class="hint transcript-keyboard-fallback">Jika tombol tidak didukung iPhone: ketuk kolom teks, lalu ketuk ikon mikrofon pada keyboard iPhone. Tulisan tetap masuk ke kolom yang sama dan dapat disimpan.</p>
-    <details class="transcript-audio-tools"><summary>Rekam atau unggah file audio (pilihan tambahan)</summary>
-      <div class="field"><label for="transcriptFile">Unggah file (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
-      <div class="transcript-grid-actions"><button class="btn secondary" data-action="transcript-record-wav" ${readonly?'disabled':''}>🎙 Mulai rekam WAV</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan rekaman</button></div>
-      <p class="hint">Mode audio terpisah dari ketik langsung di iPhone. Rekaman disimpan sementara di halaman, bukan otomatis di brankas. Simpan file jika diperlukan.</p>
-      <div id="transcriptPreview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)})</p>`:''}</div>
-      <p class="hint">Untuk memperoleh teks tanpa pengaturan server, gunakan tombol Mulai Ketik Langsung di atas; hasil audio rekaman tidak otomatis menjadi teks.</p>
-    </details>
+    <div class="field"><label for="transcriptClass">Klasifikasi materi</label><select id="transcriptClass" ${readonly?'disabled':''}>${allowedClass.map(x=>`<option ${x===draft.classification?'selected':''}>${x}</option>`).join('')}</select><p class="hint">Tidak berlaku untuk materi Terbatas yang tidak boleh diproses layanan pihak ketiga.</p></div>
+    <label class="transcript-prompt"><input type="checkbox" id="transcriptConsent" ${draft.consent?'checked':''} ${readonly?'disabled':''}> Saya sudah mendapat izin merekam dan mengizinkan pengenalan suara browser sesuai aturan instansi.</label>
+    <div class="transcript-primary-actions"><button class="btn transcript-live-start" data-action="transcript-combined" ${readonly?'disabled':''}>🔴 Mulai Rekam + Tulis Langsung</button><button class="btn ghost" data-action="transcript-stop" ${readonly?'disabled':''}>■ Hentikan</button></div>
+    <div id="transcriptLiveBanner" class="transcript-live-banner" role="status" aria-live="polite">Siap. Tekan Mulai, izinkan mikrofon, lalu bicara. Teks muncul jika browser mendukung perekaman dan dikte bersamaan.</div>
+    <p class="hint">Audio direkam sebagai WAV di perangkat. <b>Setelah berhenti, ketuk “Unduh rekaman WAV” agar file tersimpan di iPhone.</b> File belum disimpan otomatis ke brankas.</p><div class="transcript-dual-status"><span id="transcriptAudioIndicator">Audio: belum aktif</span><span id="transcriptTextIndicator">Teks: belum aktif</span></div>
+    <div id="transcriptPreview" class="transcript-preview">${audioFile?`<audio controls preload="metadata" src="${esc(audioUrl)}"></audio><p class="hint">${esc(audioFile.name)} (${fmtBytes(audioFile.size)}) · <a href="${esc(audioUrl)}" download="${esc(audioFile.name)}">⬇ Unduh rekaman WAV</a></p>`:''}</div>
     <p class="transcript-status" id="transcriptStatus" role="status" aria-live="polite"></p>
-    <div class="field"><label for="transcriptText">Hasil Ketik Langsung — koreksi sebelum menyimpan</label><textarea id="transcriptText" maxlength="80000" placeholder="Tulisan langsung muncul di sini. Anda juga bisa mengetik lewat mikrofon keyboard iPhone, menempel teks, atau mengoreksi hasil." ${readonly?'disabled':''}>${esc(draft.text)}</textarea><p class="hint">${draft.text.length.toLocaleString('id-ID')} karakter. Periksa nama, angka, kutipan, dan keputusan secara manual.</p></div>
+    <div class="field"><label for="transcriptText">Teks otomatis saat merekam — periksa setelah selesai</label><textarea id="transcriptText" maxlength="80000" placeholder="Ucapan yang dikenali browser akan muncul di sini selama merekam. Anda juga dapat mengedit atau menempelkan teks." ${readonly?'disabled':''}>${esc(draft.text)}</textarea><p class="hint">${draft.text.length.toLocaleString('id-ID')} karakter. Periksa nama, angka, kutipan dan keputusan.</p></div>
+    <details class="transcript-audio-tools"><summary>Pilihan tambahan jika browser tidak mendukung gabungan</summary>
+      <div class="transcript-grid-actions"><button class="btn secondary" data-action="transcript-dictate" ${readonly?'disabled':''}>🎤 Dikte saja (tanpa audio)</button><button class="btn secondary" data-action="transcript-record-wav" ${readonly?'disabled':''}>🎙️ Rekam WAV saja</button></div>
+      <div class="field"><label for="transcriptFile">Atau unggah rekaman (MP3, M4A, WAV, MP4, WEBM · maks. 20 MB)</label><input type="file" accept=".mp3,.m4a,.wav,.mp4,.webm,.mpeg,.mpga,audio/*" id="transcriptFile" ${readonly?'disabled':''}></div>
+      <p class="hint">Safari iPhone bisa membisukan salah satu akses mikrofon saat pengenalan suara dan perekaman dijalankan bersama. Jika muncul peringatan, audio atau teks mungkin tidak lengkap. Solusi gabungan yang konsisten memerlukan transkripsi streaming di server atau aplikasi native.</p>
+    </details>
     <label class="transcript-prompt"><input type="checkbox" id="transcriptVerified" ${draft.verified?'checked':''} ${readonly?'disabled':''}> Saya sudah membaca dan mengoreksi teks di atas. Simpan sebagai <b>draf pribadi</b>, bukan dokumen resmi.</label>
     <div class="transcript-grid-actions"><button class="btn" data-action="transcript-save" ${readonly?'disabled':''}>✓ Simpan teks terenkripsi</button><button class="btn secondary" data-action="transcript-new">＋ Transkrip baru</button><button class="btn ghost" data-action="transcript-export">↓ Unduh TXT</button></div>
     <h4>Hasil dari satu teks</h4><p class="hint">Satu kali transkrip disimpan, semua jenis draf dapat dihasilkan tanpa mengetik ulang.</p><div class="transcript-grid-actions"><button class="btn" data-action="transcript-bundle">✦ Buat semua draf sekaligus</button><button class="btn secondary" data-action="transcript-export-bundle">↓ Unduh paket draf TXT</button></div><div class="transcript-results">${[['minutes','Draf notulensi'],['summary','Petikan bahan ringkasan'],['followup','Calon tindak lanjut'],['evidence','Metadata bukti dukung']].map(([id,label])=>`<button class="btn secondary" data-action="transcript-output" data-kind="${id}">${label}</button>`).join('')}</div>
@@ -93,7 +94,7 @@
   const area=el('transcriptText');if(area)area.readOnly=active;
   const verified=el('transcriptVerified');if(verified){verified.checked=false;verified.disabled=active;}
   const saveBtn=document.querySelector?.('[data-action="transcript-save"]');if(saveBtn)saveBtn.disabled=active;
-  const startBtn=document.querySelector?.('[data-action="transcript-live"]');if(startBtn){startBtn.disabled=active;startBtn.textContent=active?'🔴 Sedang merekam & mengetik…':'🔴 Mulai Rekam + Teks Langsung';}
+  const startBtn=document.querySelector?.('[data-action="transcript-combined"]');if(startBtn){startBtn.disabled=active;startBtn.textContent=active?'● Sedang merekam — periksa status teks':'🔴 Mulai Rekam + Tulis Langsung';}
  }
  async function checkServerStatus(){
   if(!root.SIPETAK_TRANSCRIBE_SERVICE)throw Error('Modul pemeriksa server belum dimuat. Perbarui cache SIPETAK.');
@@ -108,7 +109,7 @@
   }catch(error){if(panel)panel.textContent=error.message;throw error;}
  }
  async function startLive(){
-  if(liveStarting||recordStarting||recordStopping||recorder||working)throw Error('Ada perekaman atau proses lain yang masih berjalan. Tekan Hentikan dahulu.');
+  if(combinedHandle||combinedStarting||liveStarting||recordStarting||recordStopping||recorder||working)throw Error('Ada perekaman atau proses lain yang masih berjalan. Tekan Hentikan dahulu.');
   if(!available()||myYearArchived())throw Error('Brankas harus dibuka dan tahun aktif tidak boleh diarsipkan.');
   updateDraftFromUI();
   if(draft.classification==='Terbatas')throw Error('Materi Terbatas tidak boleh diproses oleh layanan transkripsi eksternal.');
@@ -177,8 +178,72 @@
    throw error;
   }finally{liveStarting=false;}
  }
+ function startCombined(){
+  if(combinedHandle||combinedStarting||combinedStopping||recorder||recordStarting||recordStopping||liveStarting||working||dictationWanted)throw Error('Masih ada perekaman atau dikte aktif. Tekan Hentikan dahulu.');
+  if(!available()||myYearArchived())throw Error('Buka brankas SIPETAK dan pilih tahun aktif.');
+  updateDraftFromUI();
+  if(!draft.consent)throw Error('Centang izin perekaman dan pengenalan suara terlebih dahulu.');
+  if(draft.classification==='Terbatas')throw Error('Materi Terbatas tidak boleh dikirim ke pengenal suara browser.');
+  if(!root.SIPETAK_COMBINED_ENGINE?.supported?.())throw Error('Browser tidak mendukung perekaman dan dikte langsung bersamaan. Gunakan pilihan tambahan Rekam WAV saja atau Dikte saja.');
+  if(audioFile&&!confirm('Ada rekaman sebelumnya yang hanya tersimpan sementara di halaman. Pastikan sudah diunduh. Mulai rekaman baru dan ganti file sebelumnya?'))return;
+  const epoch=++combinedEpoch,base=draft.text.trim();
+  combinedStarting=true;combinedHadText=false;combinedMuted=false;combinedProblem='';draft.verified=false;
+  if(el('transcriptVerified'))el('transcriptVerified').checked=false;
+  markLiveEditing(true);previewAudio(null);indicators('meminta mikrofon','menunggu dikte');
+  // Must start both devices inside the original user click, without awaiting a network call.
+  try{
+   const handle=root.SIPETAK_COMBINED_ENGINE.start({
+    onText:value=>{
+     if(epoch!==combinedEpoch)return;
+     combinedHadText=!!value;indicators(null,combinedHadText?'sedang tertulis':'menunggu ucapan');
+     draft.text=[base,value].filter(Boolean).join(base&&value?'\n\n':'').slice(0,U.MAX_TEXT_CHARS);
+     draft.verified=false;
+     const area=el('transcriptText');if(area){area.value=draft.text;area.scrollTop=area.scrollHeight;}
+     if(el('transcriptVerified'))el('transcriptVerified').checked=false;
+    },
+    onState:state=>{
+     if(epoch!==combinedEpoch)return;
+     if(state==='text-received'){indicators(combinedMuted?'mikrofon dibisukan':'merekam WAV','sedang tertulis');if(!combinedMuted)status('🔴 Merekam WAV + teks otomatis sedang ditulis.');}
+     else if(state==='speech-unavailable'){indicators(null,'dikte berhenti');status('Audio masih direkam, tetapi dikte browser telah berhenti. Hentikan dan periksa audio.',true);}
+     else if(state==='speech-restarting')status('Dikte browser terhenti sesaat, mencoba melanjutkan. Audio tetap direkam.');
+    },
+    onError:(message,code)=>{if(epoch===combinedEpoch){combinedProblem=message;if(code==='mic-muted'){combinedMuted=true;indicators('mikrofon dibisukan',null);}else indicators(null,'dikte bermasalah');status(message,true);}},
+    onFinished:(file,error)=>{
+     if(epoch!==combinedEpoch)return;
+     combinedHandle=null;combinedStarting=false;combinedStopping=false;markLiveEditing(false);indicators(error?'gagal':'selesai',combinedHadText?'periksa hasil':'belum berhasil');
+     if(error){status('Rekaman gagal: '+(error?.message||'kesalahan perekam'),true);return;}
+     try{
+      finishedAudio(file,combinedHadText?
+       'Rekaman selesai dan teks telah muncul. SIPETAK mencoba mengunduh WAV; pastikan ada di Files. Jika belum, ketuk Unduh WAV. Periksa lalu simpan teks.':
+       'Rekaman selesai, tetapi browser belum menghasilkan teks. Pastikan WAV terunduh, lalu periksa audio. Perangkat ini mungkin tidak mendukung dua fungsi bersamaan.');
+      tryAutoDownload();
+     }catch(e){status(e?.message||'Audio tidak valid.',true);}
+    }
+   });
+   combinedHandle=handle;
+   if(!combinedProblem)status('Meminta izin mikrofon. Rekam WAV dimulai; menunggu hasil pengenalan suara browser…');
+   Promise.resolve(handle.ready).then(()=>{
+    if(epoch!==combinedEpoch)return;
+    combinedStarting=false;indicators(combinedMuted?'mikrofon dibisukan':'merekam WAV',combinedProblem?'gangguan, periksa pesan':combinedHadText?'sedang tertulis':'menunggu ucapan');
+    if(!combinedProblem)status('● Sedang merekam audio WAV. Bicara sekarang; teks akan tampil jika browser mengizinkan kedua fitur bersamaan.');
+   }).catch(error=>{
+    if(epoch!==combinedEpoch)return;
+    combinedHandle=null;combinedStarting=false;markLiveEditing(false);indicators('gagal','belum aktif');
+    status('Gagal memulai rekaman: '+(error?.message||'izin mikrofon ditolak'),true);
+   });
+  }catch(error){combinedStarting=false;markLiveEditing(false);throw error;}
+ }
+ async function stopCombined(){
+  if(combinedStopping)return;
+  if(!combinedHandle){status('Belum ada perekaman aktif.');return;}
+  combinedStopping=true;const handle=combinedHandle;
+  status('Menghentikan audio dan menyelesaikan transkrip sementara…');
+  try{await handle.stop();}
+  catch(error){status('Gagal menyelesaikan rekaman: '+(error?.message||'kesalahan Safari')+'. Teks yang sudah tampil tetap tersedia.',true);}
+  finally{if(combinedHandle===handle)combinedHandle=null;combinedStopping=false;combinedStarting=false;markLiveEditing(false);}
+ }
  async function startRecording(forceWav=false){
-  if(liveStarting||recordStarting||recordStopping||recorder)throw Error('Rekaman masih berlangsung atau sedang disiapkan. Tekan Hentikan dahulu.');
+  if(combinedHandle||combinedStarting||liveStarting||recordStarting||recordStopping||recorder)throw Error('Rekaman masih berlangsung atau sedang disiapkan. Tekan Hentikan dahulu.');
   if(working)throw Error('Selesaikan transkripsi yang sedang berjalan sebelum mulai merekam.');
   if(!root.SIPETAK_RECORDER)throw Error('Modul perekam belum dimuat. Muat ulang SIPETAK agar kode terbaru aktif.');
   recordStarting=true;const thisEpoch=recorderEpoch;
@@ -202,6 +267,7 @@
   status(message||'Rekaman selesai. Putar audio untuk memastikan terdengar sebelum menekan Ubah rekaman menjadi teks.');
  }
  async function stopRecording(){
+  if(combinedHandle||combinedStarting){await stopCombined();return;}
   if(dictationWanted||recognition){stopDictation(true);return;}
   if(recordStarting||liveStarting)throw Error('Mikrofon/koneksi sedang disiapkan. Tekan Hentikan setelah proses awal selesai.');
   if(recordStopping)return;
@@ -285,7 +351,7 @@
  }
  function startDictation(){
   if(dictationWanted){stopDictation(true);return;}
-  if(recorder||recordStarting||recordStopping||liveStarting||working)throw Error('Hentikan perekaman audio atau proses lain sebelum ketik langsung. Di iPhone keduanya dijalankan terpisah.');
+  if(combinedHandle||combinedStarting||recorder||recordStarting||recordStopping||liveStarting||working)throw Error('Hentikan perekaman sebelum menggunakan dikte saja.');
   if(!available()||myYearArchived())throw Error('Buka brankas SIPETAK dan pilih tahun yang masih aktif.');
   updateDraftFromUI();
   if(!draft.consent)throw Error('Centang izin pengenalan suara terlebih dahulu.');
@@ -307,7 +373,7 @@
   if(!draft.verified)throw Error('Periksa teks dan centang konfirmasi sebelum menyimpan.');
  }
  async function save(){
-  if(recorder||liveStarting)throw Error('Tekan Hentikan sebelum menyimpan teks.');
+  if(recorder||liveStarting||combinedHandle||combinedStarting)throw Error('Tekan Hentikan sebelum menyimpan teks.');
   requireChecked();const recs=records(),current=recs.find(x=>x.id===draft.id),other=recs.filter(x=>x.id!==draft.id);
   if(!current&&recs.length>=30)throw Error('Maksimal 30 transkrip. Unduh dan hapus riwayat lama terlebih dahulu.');
   if(other.reduce((n,x)=>n+String(x.text||'').length,0)+draft.text.length>800000)throw Error('Kapasitas teks brankas transkrip mencapai 800.000 karakter. Arsipkan riwayat lama.');
@@ -317,7 +383,7 @@
  }
  async function process(){
   if(working)throw Error('Proses masih berjalan.');
-  if(recorder||liveStarting||recordStarting)throw Error('Hentikan rekaman dahulu sebelum memproses audio ulang.');
+  if(recorder||liveStarting||recordStarting||combinedHandle||combinedStarting)throw Error('Hentikan rekaman dahulu sebelum memproses audio ulang.');
   if(!available()||myYearArchived())throw Error('Brankas/tahun aktif tidak bisa diubah.');
   updateDraftFromUI();if(!audioFile)throw Error('Rekam atau unggah audio terlebih dahulu.');
   U.validateAudio(audioFile);
@@ -398,11 +464,11 @@
  }
  async function copyOutput(){const val=el('transcriptOutputText')?.value||'';if(!val)throw Error('Buka hasil draf dahulu.');await navigator.clipboard.writeText(val);status('Draf berhasil disalin. Verifikasi sebelum digunakan.');}
  function cancel(){if(controller)controller.abort();controller=null;working=false;status('Proses dibatalkan. Rekaman tetap lokal pada halaman ini.');}
- function stopAll(){clearTimeout(liveTimer);liveTimer=null;recorderEpoch++;liveHandle?.abort();liveHandle=null;liveStarting=false;liveConnected=false;markLiveEditing(false);if(controller)controller.abort();controller=null;working=false;stopDictation();discardOnStop=true;recorder?.abort();recorder=null;recordStopping=false;}
+ function stopAll(){clearTimeout(liveTimer);liveTimer=null;combinedEpoch++;combinedHandle?.abort();combinedHandle=null;combinedStarting=false;combinedStopping=false;recorderEpoch++;liveHandle?.abort();liveHandle=null;liveStarting=false;liveConnected=false;markLiveEditing(false);if(controller)controller.abort();controller=null;working=false;stopDictation();discardOnStop=true;recorder?.abort();recorder=null;recordStopping=false;}
  function leave(){stopAll();}
  function secureLock(){discardOnStop=true;stopAll();if(audioUrl)URL.revokeObjectURL(audioUrl);audioUrl='';audioFile=null;draft={title:'',text:'',classification:'Internal',verified:false,consent:false,meetingId:'',id:'',filename:''};}
  function action(button){const a=button?.dataset?.action||'';if(!a.startsWith('transcript-'))return false;
-  const actions={'transcript-live':startLive,'transcript-service-check':checkServerStatus,'transcript-record':()=>startRecording(false),'transcript-record-wav':()=>startRecording(true),'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
+  const actions={'transcript-combined':startCombined,'transcript-live':startLive,'transcript-service-check':checkServerStatus,'transcript-record':()=>startRecording(false),'transcript-record-wav':()=>startRecording(true),'transcript-stop':stopRecording,'transcript-dictate':startDictation,'transcript-process':process,'transcript-cancel':cancel,'transcript-save':save,'transcript-new':clearDraft,'transcript-export':downloadText,'transcript-bundle':showBundle,'transcript-export-bundle':exportBundle,'transcript-output':()=>showOutput(button.dataset.kind),'transcript-copy-output':copyOutput,'transcript-load':()=>load(button.dataset.id),'transcript-delete':()=>remove(button.dataset.id),'transcript-link':linkMeeting,'transcript-create-task':createTask,'transcript-create-evidence':createEvidence};
   // Execute immediately within the real tap/click gesture (important for iOS microphone/Web Audio permissions).
   try{Promise.resolve(actions[a]?.()).catch(e=>{if(e.name==='AbortError')status('Permintaan dibatalkan.');else status(e.message||'Operasi gagal.',true);});}
   catch(e){status(e.message||'Operasi gagal.',true);}return true;
