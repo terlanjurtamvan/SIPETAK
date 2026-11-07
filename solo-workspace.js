@@ -31,6 +31,47 @@
  let tab='as-is';
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function link(id,labelText,extra=''){return `<button type="button" class="solo-module" data-action="navigate" data-view="${esc(id)}"><span class="solo-module-name">${esc(labelText)}</span>${extra?`<span class="solo-module-hint">${esc(extra)}</span>`:''}<span aria-hidden="true">↗</span></button>`;}
+ function mapFlow(isNow){
+  if(!root.SIPETAK_FLOW)return '';
+  const common={
+   id:isNow?'solo-current':'solo-target',
+   kicker:isNow?'AS-IS / PETA TERSEDIA':'TO-BE / VISI OTOMASI',
+   title:isNow?'Dari satu catatan ke hasil kerja':'Satu input. Banyak hasil. Tetap Anda yang kendalikan.',
+   subtitle:isNow?'Alur yang sudah ada dalam kode. Pilih simpul untuk membuka halaman.':'Rancangan otomatisasi lintas modul. Garis putus-putus adalah target, bukan fitur yang sudah aktif.',
+   chip:isNow?'PETA MODUL AKTIF':'TARGET / BELUM SEMUA AKTIF',
+   footer:isNow?'Proses dapat berpindah modul lewat satu ketukan. Setiap draf dan bukti tetap Anda verifikasi.':'Target pengembangan, bukan janji otomatisasi sudah berjalan. Simpul mengarah ke modul terkait yang sudah ada.'
+  };
+  const current={
+   nodes:[
+    {id:'note',title:'Catatan sekali input',note:'Catatan Kerja pribadi',icon:'✎',tone:'mint',x:125,y:115,view:'catatan'},
+    {id:'record',title:'Rekam + transkrip',note:'Rekaman WAV dan teks',icon:'◉',tone:'blue',x:125,y:400,view:'transkripsi'},
+    {id:'sekwan',title:'Asisten Sekwan',note:'Disposisi, tamu, Raperda',icon:'◈',tone:'violet',x:385,y:115,view:'sekretaris'},
+    {id:'meeting',title:'Agenda persidangan',note:'Rapat dan bahan kerja',icon:'▣',tone:'blue',x:385,y:400,view:'persidangan'},
+    {id:'review',title:'Sudah diperiksa?',note:'Koreksi draf / fakta',icon:'✓',tone:'amber',x:630,y:250,view:'asisten',shape:'decision'},
+    {id:'reports',title:'Notulen & Risalah',note:'Draf dari transkrip',icon:'▤',tone:'pink',x:872,y:105,view:'transkripsi'},
+    {id:'task',title:'Tugas dan bukti',note:'Tautan pekerjaan',icon:'☑',tone:'mint',x:872,y:270,view:'tugas'},
+    {id:'archive',title:'Laporan / PDF',note:'Rekap dan cetak',icon:'⇩',tone:'violet',x:872,y:440,view:'laporan'}
+   ],
+   edges:[{from:'note',to:'sekwan'},{from:'record',to:'meeting'},{from:'sekwan',to:'review'},{from:'meeting',to:'review'},{from:'review',to:'reports'},{from:'review',to:'task'},{from:'review',to:'archive'}],
+   mobileOrder:['note','record','sekwan','meeting','review','reports','task','archive'],
+   legend:['● Input dan modul nyata','◇ Pemeriksaan manual','➜ Klik simpul = buka halaman']
+  };
+  const future={
+   nodes:[
+    {id:'source',title:'Satu masukan',note:'Catatan / suara / dokumen',icon:'✦',tone:'mint',x:118,y:260,view:'catatan'},
+    {id:'sort',title:'Jenis kegiatan?',note:'Pilih alur terkait',icon:'◇',tone:'amber',shape:'decision',x:345,y:260,view:'otomasi'},
+    {id:'rapat',title:'Draf rapat',note:'Notulen & Risalah',icon:'▣',tone:'pink',x:563,y:106,view:'transkripsi'},
+    {id:'tugas',title:'Draf pekerjaan',note:'Tugas & pengingat',icon:'☑',tone:'blue',x:563,y:270,view:'tugas'},
+    {id:'sekwan',title:'Tindak lanjut Sekwan',note:'Tracking & koordinasi',icon:'◈',tone:'violet',x:563,y:435,view:'sekretaris',planned:true},
+    {id:'verify',title:'Verifikasi saya',note:'Validasi & koreksi',icon:'✓',tone:'amber',shape:'decision',x:778,y:270,view:'asisten'},
+    {id:'deliver',title:'Output & arsip',note:'PDF / bukti / rekap',icon:'⇩',tone:'mint',x:938,y:270,view:'laporan',planned:true}
+   ],
+   edges:[{from:'source',to:'sort'},{from:'sort',to:'rapat'},{from:'sort',to:'tugas'},{from:'sort',to:'sekwan',planned:true},{from:'rapat',to:'verify'},{from:'tugas',to:'verify'},{from:'sekwan',to:'verify',planned:true},{from:'verify',to:'deliver',planned:true}],
+   mobileOrder:['source','sort','rapat','tugas','sekwan','verify','deliver'],
+   legend:['● Fitur tersedia/sebagian','◇ Langkah verifikasi','⇢ Garis putus = target belum otomatis']
+  };
+  return root.SIPETAK_FLOW.render({...common,...(isNow?current:future)});
+ }
  function mapPage(){
    const groups=['Masukan','Rapat','Pekerjaan','Otomasi','Kinerja','Hasil','Simpan','Ringkasan'];
    const isNow=tab==='as-is';
@@ -55,10 +96,10 @@
      {title:'Asistensi Sekwan',source:'sekretaris',result:'Disposisi, tracking Raperda, tamu, kontak cepat',status:'Register pribadi tersedia',target:'Pengingat dan tindak lanjut terpadu dari semua sumber',open:'sekretaris'},
      {title:'Kinerja pribadi',source:'skp',result:'RHK, bukti, rencana aksi, laporan',status:'Draf dan relasi tersedia',target:'Rekap otomatis yang tetap bisa diaudit',open:'laporan'}
    ];
-   return `<section class="solo-map-hero"><div><span class="solo-map-eyebrow">NAVIGASI PRIBADI · MODUL SIPETAK</span><h3>🗺 Peta Kerja Interaktif</h3><p>Buka pekerjaan langsung dengan mengetuk kartu. Dibuat untuk <b>satu pengguna</b>, sebagai pengganti buku catatan dan kertas kerja.</p></div><button class="btn secondary" data-action="navigate" data-view="catatan">＋ Mulai catatan</button></section>
+   return `<section class="solo-map-hero"><div><span class="solo-map-eyebrow">NAVIGASI PRIBADI · MODUL SIPETAK</span><h3>🗺 Peta Kerja Interaktif</h3><p>Buka pekerjaan langsung dari simpul flowchart yang saling terhubung. Dibuat untuk <b>satu pengguna</b>, sebagai pengganti buku catatan dan kertas kerja.</p></div><button class="btn secondary" data-action="navigate" data-view="catatan">＋ Mulai catatan</button></section>
    <div class="solo-tabs" role="group" aria-label="Mode peta"><button type="button" class="${isNow?'active':''}" aria-pressed="${isNow}" data-action="solo-map-tab" data-tab="as-is">● Saat Ini (AS-IS)</button><button type="button" class="${!isNow?'active':''}" aria-pressed="${!isNow}" data-action="solo-map-tab" data-tab="to-be">◇ Target Otomatis (TO-BE)</button></div>
-   <section class="solo-map-overview"><div><b>${isNow?'Alur yang bisa digunakan sekarang':'Rancangan alur yang ingin dicapai'}</b><p>${isNow?'Kotak di bawah membuka modul nyata. Ketersediaan fitur bergantung pada browser, izin, dan konfigurasi.':'Target bukan janji fitur aktif. Kartu berwarna solid membuka modul yang sudah ada; kotak bergaris putus adalah pengembangan mendatang.'}</p></div><span class="solo-mode-chip">${isNow?'TERSEDIA DALAM KODE':'PETA PENGEMBANGAN'}</span></section>
-   <div class="solo-route" aria-label="Peta alur kerja ${isNow?'saat ini':'target'}">${lane}</div>
+   <section class="solo-map-overview"><div><b>${isNow?'Alur yang bisa digunakan sekarang':'Rancangan alur yang ingin dicapai'}</b><p>${isNow?'Simpul di bawah membuka modul nyata. Ketersediaan fitur bergantung pada browser, izin, dan konfigurasi.':'Target bukan janji fitur aktif. Kartu berwarna solid membuka modul yang sudah ada; simpul bergaris putus adalah pengembangan mendatang.'}</p></div><span class="solo-mode-chip">${isNow?'TERSEDIA DALAM KODE':'PETA PENGEMBANGAN'}</span></section>
+   ${mapFlow(isNow)||`<div class="solo-route" aria-label="Peta alur kerja ${isNow?'saat ini':'target'}">${lane}</div>`}
    ${isNow?`<div class="solo-note"><b>Batas saat ini:</b> audio WAV diunduh manual; hasil otomatis harus diperiksa; Supabase/AI butuh konfigurasi; otomatisasi antar semua modul belum menyeluruh.</div><div class="solo-map-sectionhead"><h3>Semua modul — klik untuk membuka</h3><p>Kelompokkan sesuai pekerjaan. Pilih kelompok untuk melihat tombol modul.</p></div><div class="solo-groups solo-accordions">${groupsHtml}</div>`:
      `<div class="solo-note"><b>Status target:</b> hanya otomatisasi catatan dan draf tertentu sudah tersedia. Sinkronisasi penuh, pengesahan dokumen dan penilaian resmi bukan tindakan otomatis.</div><div class="solo-map-sectionhead"><h3>Jalur pengembangan prioritas</h3><p>Klik "Buka modul" untuk melihat fitur yang sudah ada; target bergaris putus belum tersedia.</p></div><div class="solo-future-lanes">${futureRows.map(x=>`<article class="solo-future"><div class="solo-future-top">${link(x.source,x.title)}<span class="solo-future-status">${esc(x.status)}</span></div><div class="solo-future-built"><span>HASIL SAAT INI</span><p>${esc(x.result)}</p></div><div class="solo-future-target"><span>RENCANA BERIKUTNYA · BELUM AKTIF</span><p>${esc(x.target)}</p></div>${link(x.open,'Buka modul terkait →')}</article>`).join('')}</div>`}
    <section class="card solo-bottom"><h3>${isNow?'Mulai tanpa mengisi berulang':'Kembangkan tanpa mengganggu pekerjaan'}</h3><p>${isNow?'Gunakan Catatan Kerja sekali input atau ambil transkrip terverifikasi. Draf turunannya tertaut ke sumber.':'Perluasan dilakukan bertahap dan diuji. Hasil rapat, keputusan, data hukum, serta nilai SKP tetap harus Anda periksa.'}</p><div class="actions"><button class="btn" data-action="navigate" data-view="catatan">＋ Catatan Kerja</button><button class="btn secondary" data-action="navigate" data-view="sekretaris">◈ Peta Asisten Sekwan</button></div></section>`;

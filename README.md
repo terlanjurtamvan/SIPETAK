@@ -1,3 +1,11 @@
+## v3.15.0-rc1 — Peta Flowchart Interaktif (desain modern)
+
+- Peta Kerja **AS-IS** kini berupa diagram node dan panah dengan simpul pemeriksaan berbentuk berlian; **TO-BE** menandai target dengan garis putus-putus.
+- Peta **Asisten Sekwan** menunjukkan percabangan dari catatan/kunjungan ke tracking Raperda, disposisi, telepon cepat, tugas, dan laporan.
+- Semua simpul adalah tombol navigasi aktif ke halaman/modul yang sudah ada. Pada layar kecil muncul timeline vertikal (tanpa horizontal overflow).
+- Mesin perekaman, brankas, modul Notulen/Risalah, dan data Supabase tidak diubah. Tidak ada penyimpanan, API, atau telemetri baru.
+- Diagram menunjukkan **navigasi/alur operasional**, bukan klaim bahwa perpindahan data atau keputusan dilakukan otomatis.
+
 # SIPETAK v3.14.0-rc1 — Peta Kerja Interaktif & Catatan Pribadi
 
 Versi ini ditujukan untuk **satu pengguna**. Tambahan: peta navigasi interaktif **Saat Ini (AS-IS)** dan **Target Otomatis (TO-BE)**, serta **Catatan Kerja** sebagai pengganti buku catatan pribadi.

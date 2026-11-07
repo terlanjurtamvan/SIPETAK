@@ -1,5 +1,5 @@
 {
-  "version": "3.14.0-rc1",
+  "version": "3.15.0-rc1",
   "generated_date": "2026-11-07",
   "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
   "verified_tests": [
@@ -78,7 +78,11 @@
     "personal-visitor-register",
     "encrypted-quick-phonebook-click-to-call",
     "auto-draft-task-from-sekwan-followup",
-    "distinguish-as-is-to-be-interactive-workmap"
+    "distinguish-as-is-to-be-interactive-workmap",
+    "flowchart-modern-svg-connector-and-decision-nodes",
+    "clickable-as-is-and-to-be-workflows",
+    "sekwan-visual-branching-flowchart",
+    "responsive-mobile-flow-timeline"
   ],
   "supabase_schema_change": false,
   "vault_payload_schema": 3,
@@ -110,5 +114,12 @@
     "audio_engine_changed": false
   },
   "automated_single_entry_scope": "catatan tersimpan lalu tugas draf; jenis rapat->agenda draf; telaah->telaahan draf; disposisi->agenda/disposisi draf; Raperda->DIM draf; bidang berkaitan->metadata bukti tidak terverifikasi; lifecycle via existing reconciliation.",
-  "single_user_mode": "Satu pemilik brankas; modul Asisten Sekwan adalah catatan bantuan pribadi, bukan kewenangan persetujuan."
+  "single_user_mode": "Satu pemilik brankas; modul Asisten Sekwan adalah catatan bantuan pribadi, bukan kewenangan persetujuan.",
+  "flowchart_redesign": {
+    "version": "v3.15.0-rc1",
+    "source": "v3.14.0-rc1",
+    "navigation": "Existing page/tab actions, no route or schema changes",
+    "no_new_apis": true,
+    "recording_engine_changed": false
+  }
 }
