@@ -1,7 +1,7 @@
 {
-  "version": "3.15.0-rc1",
-  "generated_date": "2026-11-07",
-  "deployment_state": "STAGING_NOT_PRODUCTION_VERIFIED",
+  "version": "3.16.0-rc1",
+  "generated_date": "2026-11-09",
+  "deployment_state": "LOCAL_CANDIDATE_NOT_DEPLOYED",
   "verified_tests": [
     "logic",
     "theme",
@@ -121,5 +121,29 @@
     "navigation": "Existing page/tab actions, no route or schema changes",
     "no_new_apis": true,
     "recording_engine_changed": false
+  },
+  "skp_bkn_generator": {
+    "built_in": "Peta Kinerja and SKP & Rencana Aksi",
+    "basis": [
+      "PermenPANRB 6/2022",
+      "SE BKN 1/2023",
+      "PerBKN 2/2026"
+    ],
+    "features": [
+      "one-entry ledger",
+      "annual RHK mapping",
+      "SIPETAK main and Sekwan extra work",
+      "evidence references",
+      "behavior expectations",
+      "HTML print or PDF",
+      "CSV helper"
+    ],
+    "not_supported": [
+      "direct e-Kinerja import",
+      "auto approval",
+      "official grade calculations"
+    ],
+    "storage": "existing AES-GCM vault",
+    "original_media_engine_changed": false
   }
 }

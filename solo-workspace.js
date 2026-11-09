@@ -18,7 +18,7 @@
   {id:'asisten',name:'Asisten Draf',group:'Otomasi',what:'Pemeriksaan kelengkapan lokal',state:'ada'},
   {id:'tahun',name:'Tahun Kinerja',group:'Kinerja',what:'Tahun aktif dan arsip',state:'ada'},
   {id:'rhk',name:'Pemetaan RHK',group:'Kinerja',what:'Pemetaan berdasarkan SKP yang diperiksa',state:'ada'},
-  {id:'skp',name:'SKP & Rencana Aksi',group:'Kinerja',what:'Draf rencana aksi, belum pengesahan',state:'ada'},
+  {id:'skp',name:'Generator SKP BKN & Rencana Aksi',group:'Kinerja',what:'Rekap otomatis RHK utama/tambahan, bukti dan cetak PDF',state:'ada'},
   {id:'referensi',name:'Peta Kinerja',group:'Kinerja',what:'Rujukan IKU/IKI/RHK',state:'ada'},
   {id:'laporan',name:'Laporan',group:'Hasil',what:'Rekap pribadi, cetak PDF dan CSV',state:'ada'},
   {id:'pustaka',name:'Pustaka Hukum',group:'Hasil',what:'Daftar referensi untuk diverifikasi',state:'ada'},

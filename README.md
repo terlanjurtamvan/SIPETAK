@@ -1,3 +1,14 @@
+## v3.16.0-rc1 — Generator SKP BKN (draf bantu)
+
+- Terintegrasi pada **Peta Kinerja → SKP & Rencana Aksi**; bukan aplikasi terpisah.
+- Membaca Catatan Kerja, Tugas Harian, Telaahan, Persidangan, DIM, Disposisi, tracking Raperda Asisten Sekwan, Bukti Dukung dari brankas AES-GCM saat tampilan dibuka.
+- Relasi RHK berasal dari yang sudah diisi di modul; catatan lain dipetakan sekali oleh pengguna, tidak ditentukan AI otomatis.
+- Mengelompokkan hasil kerja utama dan tambahan, menduplikasi-capture aktivitas sesuai sumber note, tidak menghitung dua kali turunan yang sama.
+- Ekspor bahan bantu CSV dan print/PDF; tidak mengirim data ke BKN atau layanan eksternal.
+- Tidak mengisi nilai evaluasi, target, NIP, ekspektasi pimpinan, atau status pengesahan tanpa sumber.
+- Tahun kinerja terisolasi; tahun arsip hanya baca; rekaman dan dokumen yang sudah ada tidak diubah.
+- Rujukan: PermenPANRB 6/2022, SE BKN 1/2023, PerBKN 2/2026. Bentuk akhir e-Kinerja tetap harus diperiksa pengguna.
+
 ## v3.15.0-rc1 — Peta Flowchart Interaktif (desain modern)
 
 - Peta Kerja **AS-IS** kini berupa diagram node dan panah dengan simpul pemeriksaan berbentuk berlian; **TO-BE** menandai target dengan garis putus-putus.
